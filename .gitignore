@@ -1,0 +1,42 @@
+node_modules
+tags
+mise.toml
+CLAUDE.md
+
+# Image base
+GalaxySelect.png
+InSystemMenu.png
+LoginScreen.png
+StarMapScreen.png
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+.idea/*
+.vite/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+2026-01-19-command-messageinitcommand-message.txt
