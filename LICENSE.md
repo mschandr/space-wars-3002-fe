@@ -20,8 +20,8 @@ This summary is for convenience only. The full license terms below are what
 actually apply.
 
 ============================================================
-1. Grant of Rights
-============================================================
+
+1. # Grant of Rights
 
 Subject to the restrictions below, permission is hereby granted to any person
 obtaining a copy of this software and associated documentation files (the
@@ -34,9 +34,7 @@ obtaining a copy of this software and associated documentation files (the
 - Run the Software in private or public environments
 - Operate self-hosted instances for non-commercial use
 
-============================================================
-2. Commercial Use Restriction
-============================================================
+# ============================================================ 2. Commercial Use Restriction
 
 You may NOT, without an explicit commercial license from the copyright holder:
 
@@ -48,9 +46,7 @@ You may NOT, without an explicit commercial license from the copyright holder:
 
 This restriction applies regardless of whether the Software has been modified.
 
-============================================================
-3. Contributions
-============================================================
+# ============================================================ 3. Contributions
 
 Contributions, improvements, and fixes are welcome and encouraged but are not
 required.
@@ -59,21 +55,18 @@ You are under no obligation to publish or contribute your changes back.
 However, any contributions you voluntarily submit may be incorporated into
 the Software under the terms of this license.
 
-============================================================
-4. Ownership and Dual Licensing
-============================================================
+# ============================================================ 4. Ownership and Dual Licensing
 
 The copyright holder retains all ownership rights.
 
 The copyright holder may:
+
 - Offer the Software under separate commercial terms
 - Re-license the Software in the future
 - Operate paid services based on the Software
 - Grant commercial licenses to third parties
 
-============================================================
-5. Assets, Trademarks, and Branding
-============================================================
+# ============================================================ 5. Assets, Trademarks, and Branding
 
 This license applies ONLY to the source code.
 
@@ -81,20 +74,15 @@ All game assets, artwork, music, sound effects, story content, trademarks,
 logos, and branding associated with Space Wars 3002 are expressly excluded
 unless otherwise stated.
 
-============================================================
-6. Disclaimer of Warranty
-============================================================
+# ============================================================ 6. Disclaimer of Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
 
-============================================================
-7. Limitation of Liability
-============================================================
+# ============================================================ 7. Limitation of Liability
 
 IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR
 OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
 ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
-

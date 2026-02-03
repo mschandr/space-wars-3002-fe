@@ -4,7 +4,6 @@
 	import { base } from '$app/paths';
 	import { auth } from '$lib/auth.svelte';
 	import { playerState } from '$lib/stores/playerState.svelte';
-	import type { SystemDataResponse } from '$lib/api';
 	import PlayerStats from '$lib/components/game/PlayerStats.svelte';
 	import SystemMenu from '$lib/components/game/SystemMenu.svelte';
 	import ActionPanel from '$lib/components/game/ActionPanel.svelte';
@@ -17,7 +16,6 @@
 	let { data }: Props = $props();
 
 	let activeMenuItem = $state<'planets' | 'trading' | 'salvage' | 'warp' | null>(null);
-	let systemData = $state<SystemDataResponse | null>(null);
 
 	// Player creation form state
 	let callSignInput = $state('');
@@ -49,11 +47,20 @@
 	});
 
 	async function loadCurrentSystemData() {
-		if (!playerState.currentSystem) return;
+		if (!playerState.currentSystem) {
+			console.log('[PlayPage] No current system, skipping location load');
+			return;
+		}
 
-		const loadedData = await playerState.loadSystemData();
-		if (loadedData) {
-			systemData = loadedData;
+		console.log('[PlayPage] Loading location details for:', playerState.currentSystem.uuid);
+
+		// Only load location details using the documented API
+		const locationData = await playerState.loadLocationDetails();
+
+		if (locationData) {
+			console.log('[PlayPage] Location details loaded:', locationData);
+		} else {
+			console.log('[PlayPage] Failed to load location details');
 		}
 	}
 
@@ -201,7 +208,7 @@
 				onSelect={handleMenuSelect}
 			/>
 
-			<ActionPanel activeItem={activeMenuItem} {systemData} onAction={handleAction} />
+			<ActionPanel activeItem={activeMenuItem} onAction={handleAction} />
 
 			<PlayerStats
 				hull={playerState.ship?.hull ?? defaultShip.hull}

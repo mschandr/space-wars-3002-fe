@@ -348,6 +348,117 @@ export type JoinGalaxyErrorCode =
 	| 'DUPLICATE_CALL_SIGN'
 	| 'NO_STARTING_LOCATION';
 
+// Location types
+export interface LocationSector {
+	uuid: string;
+	name: string;
+	grid: { x: number; y: number };
+	danger_level: 'low' | 'medium' | 'high' | 'extreme';
+	display_name: string;
+}
+
+export interface LocationBody {
+	type: 'planet' | 'moon' | 'station' | 'asteroid';
+	uuid: string;
+	name: string;
+}
+
+export interface LocationGate {
+	destination_uuid: string;
+	destination_name: string;
+	distance: number;
+}
+
+export interface CurrentLocationResponse {
+	location: string;
+	system_name: string;
+	system_uuid: string;
+	coordinates: { x: number; y: number };
+	sector: LocationSector;
+	type: string;
+	knowledge_level: 'none' | 'basic' | 'detailed' | 'complete';
+	is_current_location: boolean;
+	inhabited?: {
+		is_inhabited: boolean;
+		bodies: LocationBody[];
+		planet_count: number;
+		moon_count: number;
+		station_count: number;
+	};
+	has?: {
+		gates: Record<string, LocationGate>;
+		gate_count: number;
+		services: string[];
+		trading_hub?: {
+			uuid: string;
+			name: string;
+		};
+	};
+}
+
+// Trading Hub types
+export interface TradingHub {
+	uuid: string;
+	name: string;
+	location: {
+		uuid: string;
+		name: string;
+	};
+	is_active: boolean;
+	has_shipyard: boolean;
+	has_repair_shop: boolean;
+	has_cartographer: boolean;
+	has_plans_shop: boolean;
+}
+
+export interface ShipTemplate {
+	uuid: string;
+	name: string;
+	class: string;
+	price: number;
+	base_cargo: number;
+	base_fuel: number;
+	base_weapons: number;
+	base_hull: number;
+	description: string;
+}
+
+export interface ShipyardResponse {
+	shipyard: {
+		uuid: string;
+		name: string;
+	};
+	available_ships: ShipTemplate[];
+}
+
+// Ship types
+export interface Ship {
+	uuid: string;
+	name: string;
+	class: string;
+	is_active?: boolean;
+}
+
+export interface PurchaseShipRequest {
+	ship_uuid: string;
+	ship_name?: string;
+}
+
+export interface PurchaseShipResponse {
+	purchased_ship: Ship;
+	price_paid: number;
+	credits_remaining: number;
+}
+
+export interface SwitchShipRequest {
+	ship_uuid: string;
+}
+
+export interface SwitchShipResponse {
+	active_ship: Ship;
+	previous_ship: Ship;
+}
+
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
@@ -665,6 +776,45 @@ export const api = {
 
 		async getSystemData(playerUuid: string, poiUuid: string) {
 			return request<SystemDataResponse>(`/players/${playerUuid}/system-data/${poiUuid}`);
+		},
+
+		// Ship management
+		async purchaseShip(playerUuid: string, data: PurchaseShipRequest) {
+			return request<PurchaseShipResponse>(`/players/${playerUuid}/ships/purchase`, {
+				method: 'POST',
+				body: JSON.stringify(data)
+			});
+		},
+
+		async switchShip(playerUuid: string, data: SwitchShipRequest) {
+			return request<SwitchShipResponse>(`/players/${playerUuid}/ships/switch`, {
+				method: 'POST',
+				body: JSON.stringify(data)
+			});
+		},
+
+		async getShips(playerUuid: string) {
+			return request<Ship[]>(`/players/${playerUuid}/ships`);
+		}
+	},
+
+	// Location endpoints
+	location: {
+		async getCurrent(poiUuid: string) {
+			return request<CurrentLocationResponse>(`/location/current/${poiUuid}`, {
+				method: 'POST'
+			});
+		}
+	},
+
+	// Trading Hub endpoints
+	tradingHubs: {
+		async get(hubUuid: string) {
+			return request<TradingHub>(`/trading-hubs/${hubUuid}`);
+		},
+
+		async getShipyard(hubUuid: string) {
+			return request<ShipyardResponse>(`/trading-hubs/${hubUuid}/shipyard`);
 		}
 	}
 };
