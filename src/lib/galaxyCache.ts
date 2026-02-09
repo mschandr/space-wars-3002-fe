@@ -63,3 +63,14 @@ export function clearGalaxyCache(): void {
 	if (typeof localStorage === 'undefined') return;
 	localStorage.removeItem(CACHE_KEY);
 }
+
+export function getGalaxyFromCache(uuid: string): GalaxySummary | null {
+	const cache = getCache();
+	if (!cache) return null;
+
+	// Search in my_games first, then open_games
+	const found =
+		cache.my_games.find((g) => g.uuid === uuid) || cache.open_games.find((g) => g.uuid === uuid);
+
+	return found || null;
+}

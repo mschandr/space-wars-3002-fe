@@ -1,29 +1,168 @@
 <script lang="ts">
+	interface SectorData {
+		uuid?: string;
+		name?: string;
+		grid?: { x: number; y: number };
+		display_name?: string;
+		danger_level?: 'low' | 'medium' | 'high' | 'extreme';
+	}
+
+	// Menu item types
+	type MenuItemId =
+		| 'planets'
+		| 'warp'
+		| 'trading_hub'
+		| 'shipyard'
+		| 'salvage'
+		| 'cartographer'
+		| 'bar'
+		| 'repair_shop'
+		| 'refuel'
+		| 'black_market';
+
 	interface Props {
 		systemName: string;
 		systemType: string;
-		activeItem: 'planets' | 'trading' | 'salvage' | 'warp' | null;
-		onSelect: (item: 'planets' | 'trading' | 'salvage' | 'warp') => void;
+		sector?: SectorData | null;
+		availableServices?: string[];
+		activeItem: MenuItemId | null;
+		onSelect: (item: MenuItemId) => void;
 	}
 
-	let { systemName, systemType, activeItem, onSelect }: Props = $props();
+	let { systemName, systemType, sector, availableServices = [], activeItem, onSelect }: Props =
+		$props();
 
-	const menuItems = [
-		{ id: 'planets' as const, label: 'Local Planets', icon: '\u{1F30D}' },
-		{ id: 'trading' as const, label: 'Trading Hub', icon: '\u{1F4B0}' },
-		{ id: 'salvage' as const, label: 'Salvage Yard', icon: '\u{1F527}' },
-		{ id: 'warp' as const, label: 'Warp Gates', icon: '\u{2728}' }
+	// Service to menu item mapping (handles various naming conventions from backend)
+	const serviceMenuMap: Record<string, { id: MenuItemId; label: string; icon: string }> = {
+		// Trading Hub variants
+		trading_hub: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		'trading hub': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		commerce_hub: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		'commerce hub': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		trading_post: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		'trading post': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+
+		// Salvage Yard variants
+		salvage_yard: { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		'salvage yard': { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		salvage: { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		salvage_and_reclamation: { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		'salvage and reclamation': { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		junk_yard: { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		'junk yard': { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+		junkyard: { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
+
+		// Shipyard variants
+		shipyard: { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		ship_yard: { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		'ship yard': { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		ship_yards: { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		'ship yards': { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		ship_shop: { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		'ship shop': { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		ship_builders: { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		'ship builders': { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		ship_construction: { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+		'ship construction': { id: 'shipyard', label: 'Shipyard', icon: '\u{1F680}' },
+
+		// Drinking Establishment variants
+		bar: { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+		pub: { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+		cantina: { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+		nightclub: { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+		'night club': { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+		tavern: { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+		lounge: { id: 'bar', label: 'Cantina', icon: '\u{1F37A}' },
+
+		// Cartographer/Star Charts variants
+		cartographer: { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		cartography: { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		stellar_cartographers: { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		'stellar cartographers': { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		stellar_cartographer: { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		'stellar cartographer': { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		star_charts: { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		'star charts': { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		plans_shop: { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+		'plans shop': { id: 'cartographer', label: 'Stellar Cartographer', icon: '\u{1F5FA}' },
+
+		// Repair Shop variants
+		repair_shop: { id: 'repair_shop', label: 'Repair Shop', icon: '\u{1F6E0}' },
+		'repair shop': { id: 'repair_shop', label: 'Repair Shop', icon: '\u{1F6E0}' },
+		repair_yard: { id: 'repair_shop', label: 'Repair Shop', icon: '\u{1F6E0}' },
+		'repair yard': { id: 'repair_shop', label: 'Repair Shop', icon: '\u{1F6E0}' },
+		repairs: { id: 'repair_shop', label: 'Repair Shop', icon: '\u{1F6E0}' },
+
+		// Refueling variants
+		refuel: { id: 'refuel', label: 'Refueling Station', icon: '\u{26FD}' },
+		refueling: { id: 'refuel', label: 'Refueling Station', icon: '\u{26FD}' },
+		refueling_station: { id: 'refuel', label: 'Refueling Station', icon: '\u{26FD}' },
+		'refueling station': { id: 'refuel', label: 'Refueling Station', icon: '\u{26FD}' },
+		fuel_depot: { id: 'refuel', label: 'Refueling Station', icon: '\u{26FD}' },
+		'fuel depot': { id: 'refuel', label: 'Refueling Station', icon: '\u{26FD}' },
+
+		// Black Market variants
+		black_market: { id: 'black_market', label: 'Black Market', icon: '\u{1F5DD}' },
+		'black market': { id: 'black_market', label: 'Black Market', icon: '\u{1F5DD}' },
+		blackmarket: { id: 'black_market', label: 'Black Market', icon: '\u{1F5DD}' }
+	};
+
+	// Always-visible menu items
+	const coreMenuItems: { id: MenuItemId; label: string; icon: string }[] = [
+		{ id: 'planets', label: 'Star System', icon: '\u{1F30D}' },
+		{ id: 'warp', label: 'Warp Gates', icon: '\u{2728}' }
 	];
+
+	// Dynamically build menu items based on available services
+	const dynamicMenuItems = $derived.by(() => {
+		const serviceItems: { id: MenuItemId; label: string; icon: string }[] = [];
+		const addedIds = new Set<MenuItemId>();
+
+		for (const service of availableServices) {
+			const menuItem = serviceMenuMap[service.toLowerCase()];
+			if (menuItem && !addedIds.has(menuItem.id)) {
+				serviceItems.push(menuItem);
+				addedIds.add(menuItem.id);
+			}
+		}
+
+		// Sort service items by a predefined order
+		const serviceOrder: MenuItemId[] = [
+			'trading_hub',
+			'shipyard',
+			'salvage',
+			'repair_shop',
+			'refuel',
+			'cartographer',
+			'bar',
+			'black_market'
+		];
+		serviceItems.sort(
+			(a, b) => serviceOrder.indexOf(a.id) - serviceOrder.indexOf(b.id)
+		);
+
+		return serviceItems;
+	});
+
+	// Combined menu items
+	const allMenuItems = $derived([...coreMenuItems, ...dynamicMenuItems]);
 </script>
 
 <nav class="system-menu">
 	<div class="menu-header">
 		<h2 class="system-name">{systemName}</h2>
 		<span class="system-type">- {systemType}</span>
+		{#if sector}
+			<div class="sector-info">
+				<span class="sector-label">Sector:</span>
+				<span class="sector-name">{sector.display_name ?? sector.name}</span>
+			</div>
+		{/if}
 	</div>
 
 	<ul class="menu-items">
-		{#each menuItems as item (item.id)}
+		<!-- Core navigation items -->
+		{#each coreMenuItems as item (item.id)}
 			<li>
 				<button
 					class="menu-item"
@@ -35,6 +174,34 @@
 				</button>
 			</li>
 		{/each}
+
+		<!-- Separator if there are services -->
+		{#if dynamicMenuItems.length > 0}
+			<li class="menu-separator">
+				<span class="separator-label">Available Services</span>
+			</li>
+
+			<!-- Dynamic service items -->
+			{#each dynamicMenuItems as item (item.id)}
+				<li>
+					<button
+						class="menu-item service-item"
+						class:active={activeItem === item.id}
+						onclick={() => onSelect(item.id)}
+					>
+						<span class="item-icon">{item.icon}</span>
+						<span class="item-label">{item.label}</span>
+					</button>
+				</li>
+			{/each}
+		{/if}
+
+		<!-- No services message -->
+		{#if dynamicMenuItems.length === 0}
+			<li class="no-services">
+				<span class="no-services-text">No services available</span>
+			</li>
+		{/if}
 	</ul>
 </nav>
 
@@ -64,6 +231,27 @@
 		font-size: 0.8rem;
 		color: #718096;
 		text-transform: uppercase;
+	}
+
+	.sector-info {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid rgba(74, 85, 104, 0.5);
+	}
+
+	.sector-label {
+		font-size: 0.7rem;
+		color: #718096;
+		text-transform: uppercase;
+	}
+
+	.sector-name {
+		font-size: 0.8rem;
+		color: #f6ad55;
+		font-weight: 500;
 	}
 
 	.menu-items {
@@ -107,5 +295,38 @@
 
 	.item-label {
 		flex: 1;
+	}
+
+	.menu-separator {
+		padding: 0.5rem 1rem 0.25rem;
+		margin-top: 0.25rem;
+		border-top: 1px solid rgba(74, 85, 104, 0.5);
+	}
+
+	.separator-label {
+		font-size: 0.65rem;
+		color: #718096;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.service-item {
+		padding-left: 1rem;
+	}
+
+	.service-item .item-icon {
+		opacity: 0.9;
+	}
+
+	.no-services {
+		padding: 0.75rem 1rem;
+		margin-top: 0.25rem;
+		border-top: 1px solid rgba(74, 85, 104, 0.5);
+	}
+
+	.no-services-text {
+		font-size: 0.75rem;
+		color: #718096;
+		font-style: italic;
 	}
 </style>

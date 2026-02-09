@@ -7,7 +7,21 @@
 	import PlayerStats from '$lib/components/game/PlayerStats.svelte';
 	import SystemMenu from '$lib/components/game/SystemMenu.svelte';
 	import ActionPanel from '$lib/components/game/ActionPanel.svelte';
+	import SectorGrid from '$lib/components/game/SectorGrid.svelte';
 	import SpaceLoader from '$lib/components/SpaceLoader.svelte';
+
+	// Menu item types matching SystemMenu
+	type MenuItemId =
+		| 'planets'
+		| 'warp'
+		| 'trading_hub'
+		| 'shipyard'
+		| 'salvage'
+		| 'cartographer'
+		| 'bar'
+		| 'repair_shop'
+		| 'refuel'
+		| 'black_market';
 
 	interface Props {
 		data: { galaxyUuid: string };
@@ -15,7 +29,26 @@
 
 	let { data }: Props = $props();
 
-	let activeMenuItem = $state<'planets' | 'trading' | 'salvage' | 'warp' | null>(null);
+	let activeMenuItem = $state<MenuItemId | null>(null);
+
+	// Get available services from facilities (preferred) or location details (fallback)
+	const availableServices = $derived.by(() => {
+		const facilities = playerState.facilities;
+		if (facilities?.facilities?.summary) {
+			const summary = facilities.facilities.summary;
+			const services: string[] = [];
+			if (summary.has_trading) services.push('trading_hub');
+			if (summary.has_ship_services) services.push('shipyard');
+			if (summary.has_salvage) services.push('salvage');
+			if (summary.has_cartographer) services.push('cartographer');
+			if (summary.has_bar) services.push('bar');
+			// Add more based on facilities data
+			if (summary.total_trading_stations > 0) services.push('trading_hub');
+			return [...new Set(services)]; // Remove duplicates
+		}
+		// Fallback to location details
+		return playerState.locationDetails?.has?.services ?? [];
+	});
 
 	// Player creation form state
 	let callSignInput = $state('');
@@ -54,13 +87,22 @@
 
 		console.log('[PlayPage] Loading location details for:', playerState.currentSystem.uuid);
 
-		// Only load location details using the documented API
-		const locationData = await playerState.loadLocationDetails();
+		// Load location details and facilities in parallel
+		const [locationData, facilitiesData] = await Promise.all([
+			playerState.loadLocationDetails(),
+			playerState.loadFacilities()
+		]);
 
 		if (locationData) {
 			console.log('[PlayPage] Location details loaded:', locationData);
 		} else {
 			console.log('[PlayPage] Failed to load location details');
+		}
+
+		if (facilitiesData) {
+			console.log('[PlayPage] Facilities loaded:', facilitiesData);
+		} else {
+			console.log('[PlayPage] Failed to load facilities (or none available)');
 		}
 	}
 
@@ -94,13 +136,19 @@
 		}
 	}
 
-	function handleMenuSelect(item: 'planets' | 'trading' | 'salvage' | 'warp') {
+	function handleMenuSelect(item: MenuItemId) {
 		activeMenuItem = item;
 	}
 
 	function handleAction(action: string, targetUuid?: string) {
 		console.log('Action:', action, 'Target:', targetUuid);
 		// Handle various actions - to be implemented
+	}
+
+	async function handleTravelComplete() {
+		console.log('[PlayPage] Travel complete, reloading location data');
+		// Reload location details for the new system
+		await loadCurrentSystemData();
 	}
 
 	function navigateToMap() {
@@ -110,13 +158,6 @@
 	function navigateBack() {
 		goto(`${base}/galaxies`);
 	}
-
-	// Default ship stats for loading state
-	const defaultShip = {
-		hull: { current: 100, max: 100 },
-		shield: { current: 50, max: 100, grade: 'F2.36' },
-		fuel: { current: 80, max: 100 }
-	};
 </script>
 
 <svelte:head>
@@ -130,7 +171,13 @@
 				<span class="title-icon">&#9733;</span>
 				<span>SPACE WARS 3002</span>
 			</div>
-			<a href="{base}/galaxies" class="link-secondary">Change galaxy</a>
+			<div class="galaxy-info">
+				{#if playerState.galaxyName}
+					<span class="galaxy-name">{playerState.galaxyName}</span>
+					<span class="separator">|</span>
+				{/if}
+				<a href="{base}/galaxies" class="link-secondary">Change galaxy</a>
+			</div>
 		</div>
 		<div class="header-right">
 			{#if playerState.playerUuid}
@@ -201,19 +248,30 @@
 		</div>
 	{:else}
 		<main class="game-main">
-			<SystemMenu
-				systemName={playerState.currentSystem?.name ?? 'Unknown System'}
-				systemType={playerState.currentSystem?.type ?? 'STAR SYSTEM'}
-				activeItem={activeMenuItem}
-				onSelect={handleMenuSelect}
-			/>
+			<div class="left-panel">
+				<SystemMenu
+					systemName={playerState.currentSystem?.name ?? 'Unknown System'}
+					systemType={playerState.currentSystem?.type ?? 'STAR SYSTEM'}
+					sector={playerState.currentSector ?? playerState.locationDetails?.sector}
+					availableServices={availableServices}
+					activeItem={activeMenuItem}
+					onSelect={handleMenuSelect}
+				/>
 
-			<ActionPanel activeItem={activeMenuItem} onAction={handleAction} />
+				<SectorGrid
+					sector={playerState.currentSector ?? playerState.locationDetails?.sector ?? null}
+					gridSize={playerState.galaxyGridSize}
+					currentSystemUuid={playerState.currentSystem?.uuid}
+				/>
+			</div>
+
+			<ActionPanel activeItem={activeMenuItem} onAction={handleAction} onTravelComplete={handleTravelComplete} />
 
 			<PlayerStats
-				hull={playerState.ship?.hull ?? defaultShip.hull}
-				shield={playerState.ship?.shield ?? defaultShip.shield}
-				fuel={playerState.ship?.fuel ?? defaultShip.fuel}
+				hasShip={!!playerState.activeShip}
+				hull={playerState.ship?.hull}
+				shield={playerState.ship?.shield}
+				fuel={playerState.ship?.fuel}
 				distance={45.2}
 				cooldown={0}
 				collision={false}
@@ -257,6 +315,23 @@
 
 	.title-icon {
 		color: #f6ad55;
+	}
+
+	.galaxy-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.galaxy-name {
+		color: #f6ad55;
+		font-size: 0.85rem;
+		font-weight: 500;
+	}
+
+	.separator {
+		color: #4a5568;
+		font-size: 0.75rem;
 	}
 
 	.link-secondary {
@@ -331,6 +406,14 @@
 		max-width: 1400px;
 		margin: 0 auto;
 		width: 100%;
+	}
+
+	.left-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		width: 220px;
+		flex-shrink: 0;
 	}
 
 	/* Player Creation Modal */

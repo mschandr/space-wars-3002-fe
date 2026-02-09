@@ -146,13 +146,6 @@
 		goto(`${base}/galaxies/${data.galaxyUuid}/play`);
 	}
 
-	// Default ship stats
-	const defaultShip = {
-		hull: { current: 100, max: 100 },
-		shield: { current: 50, max: 100, grade: 'F2.36' },
-		fuel: { current: 80, max: 100 }
-	};
-
 	// Player position for map centering
 	const playerPosition = $derived(() => {
 		const currentUuid = playerState.currentSystem?.uuid;
@@ -202,9 +195,10 @@
 			</div>
 
 			<PlayerStats
-				hull={playerState.ship?.hull ?? defaultShip.hull}
-				shield={playerState.ship?.shield ?? defaultShip.shield}
-				fuel={playerState.ship?.fuel ?? defaultShip.fuel}
+				hasShip={!!playerState.activeShip}
+				hull={playerState.ship?.hull}
+				shield={playerState.ship?.shield}
+				fuel={playerState.ship?.fuel}
 				distance={45.2}
 				cooldown={0}
 				collision={false}

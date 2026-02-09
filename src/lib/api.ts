@@ -28,7 +28,7 @@ export interface AuthData {
 	token_type: string;
 }
 
-export type GameMode = 'multiplayer' | 'single_player' | 'mixed';
+export type GameMode = 'multiplayer' | 'single_player';
 
 export type NpcArchetype = 'trader' | 'merchant' | 'explorer' | 'miner' | 'pirate_hunter';
 
@@ -439,6 +439,30 @@ export interface Ship {
 	is_active?: boolean;
 }
 
+export interface ShipClass {
+	id: number;
+	name: string;
+	class: string;
+}
+
+export interface MyShipResponse {
+	uuid: string;
+	name: string;
+	current_fuel: number;
+	max_fuel: number;
+	fuel_regen_rate: number;
+	hull: number;
+	max_hull: number;
+	shields: number;
+	max_shields: number;
+	weapons: number;
+	cargo_hold: number;
+	sensors: number;
+	warp_drive: number;
+	status: string;
+	ship_class: ShipClass;
+}
+
 export interface PurchaseShipRequest {
 	ship_uuid: string;
 	ship_name?: string;
@@ -459,24 +483,578 @@ export interface SwitchShipResponse {
 	previous_ship: Ship;
 }
 
-const DEFAULT_TIMEOUT = 10000; // 10 seconds
+// Player Location Response
+export interface PlayerLocationBody {
+	uuid: string;
+	name: string;
+	type: string;
+	sub_type?: string;
+	is_inhabited?: boolean;
+	population?: number;
+	services?: string[];
+}
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+export interface PlayerLocationResponse {
+	system: {
+		uuid: string;
+		name: string;
+		type: string;
+		coordinates: { x: number; y: number };
+	};
+	sector: {
+		uuid: string;
+		name: string;
+		grid: { x: number; y: number };
+		danger_level: string;
+	};
+	bodies: PlayerLocationBody[];
+	gates: {
+		uuid: string;
+		destination_uuid: string;
+		destination_name: string;
+		distance: number;
+	}[];
+	services: string[];
+}
+
+// Local Bodies Response
+export interface OrbitalBody {
+	uuid: string;
+	name: string;
+	type: 'planet' | 'moon' | 'asteroid_belt' | 'station';
+	sub_type?: string;
+	type_label?: string;
+	orbital_position: number;
+	is_inhabited: boolean;
+	population?: number;
+	services?: string[];
+	moons?: OrbitalBody[];
+
+	// Physical characteristics
+	size?: 'tiny' | 'small' | 'medium' | 'large' | 'giant' | 'massive';
+	radius?: number;
+	mass?: number;
+	gravity?: number;
+	atmosphere?: string;
+	temperature?: number;
+	temperature_class?: 'frozen' | 'cold' | 'temperate' | 'warm' | 'hot' | 'scorching';
+	climate?: string;
+	biome?: string;
+	hydrosphere?: number; // Percentage of water coverage
+
+	// Resources and economy
+	resources?: PlanetResource[];
+	resource_richness?: 'barren' | 'poor' | 'moderate' | 'rich' | 'abundant';
+	economy_type?: string;
+	tech_level?: number;
+	trade_goods?: string[];
+
+	// Political/social
+	government_type?: string;
+	faction?: string;
+	allegiance?: string;
+	security_level?: 'lawless' | 'low' | 'medium' | 'high' | 'maximum';
+
+	// Hazards and features
+	hazards?: string[];
+	special_features?: string[];
+	anomalies?: string[];
+	points_of_interest?: PointOfInterest[];
+
+	// Description
+	description?: string;
+	discovered_by?: string;
+	discovered_at?: string;
+
+	// Station-specific
+	station_type?: string;
+	docking_fee?: number;
+	max_landing_pad_size?: 'small' | 'medium' | 'large';
+}
+
+export interface PlanetResource {
+	name: string;
+	type: string;
+	abundance: 'trace' | 'low' | 'moderate' | 'high' | 'very_high';
+	extractable: boolean;
+}
+
+export interface PointOfInterest {
+	uuid: string;
+	name: string;
+	type: string;
+	description?: string;
+}
+
+export interface LocalBodiesResponse {
+	system: {
+		uuid: string;
+		name: string;
+		type: string;
+		stellar_class?: string;
+		stellar_size?: string;
+		luminosity?: number;
+		temperature?: number;
+		age?: number;
+	};
+	sector: {
+		uuid: string;
+		name: string;
+		display_name: string;
+		grid: { x: number; y: number };
+		danger_level: 'low' | 'medium' | 'high' | 'extreme';
+	};
+	bodies: {
+		planets: OrbitalBody[];
+		asteroid_belts: OrbitalBody[];
+		stations: OrbitalBody[];
+	};
+	warp_gates?: StarSystemWarpGate[];
+	summary: {
+		total_bodies: number;
+		planet_count: number;
+		moon_count: number;
+		asteroid_belt_count: number;
+		station_count: number;
+		inhabited_count: number;
+	};
+	// Comprehensive features summary
+	features?: SystemFeaturesSummary;
+}
+
+// Star System Feature Summary types
+export interface SystemServiceSummary {
+	type: string;
+	name: string;
+	location_uuid: string;
+	location_name: string;
+}
+
+export interface SystemResourceSummary {
+	name: string;
+	type: string;
+	abundance: 'trace' | 'low' | 'moderate' | 'high' | 'very_high';
+	locations: string[]; // Body names where found
+}
+
+export interface SystemFactionPresence {
+	faction_uuid: string;
+	faction_name: string;
+	influence: number; // 0-100
+	is_controlling: boolean;
+}
+
+export interface SystemFeaturesSummary {
+	// Services available in the system
+	services: SystemServiceSummary[];
+	has_trading_hub: boolean;
+	has_shipyard: boolean;
+	has_repair_shop: boolean;
+	has_cartographer: boolean;
+	has_refueling: boolean;
+	has_black_market: boolean;
+
+	// Resources
+	resources: SystemResourceSummary[];
+	resource_richness: 'barren' | 'poor' | 'moderate' | 'rich' | 'abundant';
+	mineable_asteroids: number;
+
+	// Hazards and dangers
+	hazards: string[];
+	danger_level: 'safe' | 'low' | 'medium' | 'high' | 'extreme';
+	pirate_activity: 'none' | 'low' | 'moderate' | 'high' | 'infested';
+
+	// Political/faction
+	factions: SystemFactionPresence[];
+	controlling_faction?: string;
+	security_level: 'lawless' | 'low' | 'medium' | 'high' | 'maximum';
+
+	// Points of interest
+	anomalies: string[];
+	special_features: string[];
+	landmarks: string[];
+
+	// Economy
+	economy_types: string[];
+	trade_routes: number;
+	market_demand: string[]; // Goods in demand
+	market_surplus: string[]; // Goods in surplus
+
+	// Exploration
+	unexplored_bodies: number;
+	scan_completion: number; // 0-100 percentage
+	discoveries_available: boolean;
+}
+
+// Star System types
+export interface StarSystemSummary {
+	uuid: string;
+	name: string;
+	type: string;
+	stellar_class?: string;
+	position: { x: number; y: number };
+	sector: {
+		uuid: string;
+		name: string;
+		display_name?: string;
+	};
+	is_inhabited: boolean;
+	is_known: boolean;
+	is_charted: boolean;
+	scan_level: number;
+	distance?: number;
+	// Quick feature flags for list views
+	features?: {
+		has_services: boolean;
+		has_trading: boolean;
+		has_hazards: boolean;
+		has_resources: boolean;
+		has_anomalies: boolean;
+	};
+}
+
+export interface StarSystemWarpGate {
+	uuid: string;
+	destination_uuid: string;
+	destination_name: string;
+	distance: number;
+	is_active: boolean;
+}
+
+export interface StarSystemDetails {
+	uuid: string;
+	name: string;
+	type: string;
+	stellar_class?: string;
+	stellar_size?: string;
+	luminosity?: number;
+	temperature?: number;
+	age?: number;
+	position: { x: number; y: number };
+	sector: {
+		uuid: string;
+		name: string;
+		display_name?: string;
+		grid: { x: number; y: number };
+		danger_level: 'low' | 'medium' | 'high' | 'extreme';
+	};
+	is_inhabited: boolean;
+	is_known: boolean;
+	is_charted: boolean;
+	scan_level: number;
+	bodies: {
+		planets: OrbitalBody[];
+		asteroid_belts: OrbitalBody[];
+		stations: OrbitalBody[];
+	};
+	warp_gates: StarSystemWarpGate[];
+	trading_hub?: {
+		uuid: string;
+		name: string;
+	};
+	summary: {
+		total_bodies: number;
+		planet_count: number;
+		moon_count: number;
+		asteroid_belt_count: number;
+		station_count: number;
+		inhabited_count: number;
+	};
+	// Comprehensive features summary
+	features?: SystemFeaturesSummary;
+	visibility: {
+		full_visibility: boolean;
+		visible_scan_levels: number[];
+	};
+}
+
+export interface StarSystemListResponse {
+	systems: StarSystemSummary[];
+	filters: {
+		known?: boolean;
+		inhabited?: boolean;
+		scanned?: boolean;
+		charted?: boolean;
+	};
+	total: number;
+}
+
+// Travel types
+export interface TravelResponse {
+	success: boolean;
+	status?: 'complete' | 'generating';
+	message?: string;
+	destination: {
+		uuid: string;
+		name: string;
+		type: string;
+		position: { x: number; y: number };
+	};
+	sector: {
+		uuid: string;
+		name: string;
+		display_name?: string;
+		grid: { x: number; y: number };
+		danger_level: 'low' | 'medium' | 'high' | 'extreme';
+	};
+	fuel_used: number;
+	fuel_remaining: number;
+	travel_time?: number;
+}
+
+// System generation status response
+export interface SystemGenerationStatus {
+	status: 'generating' | 'complete' | 'error';
+	message?: string;
+	progress?: number;
+}
+
+// Facilities types
+export interface Facility {
+	uuid: string;
+	name: string;
+	type?: string;
+	location?: string;
+	description?: string;
+	services?: string[];
+	endpoint?: string;
+}
+
+export interface FacilityAction {
+	id: string;
+	label: string;
+	endpoint: string;
+	facility_uuid?: string;
+}
+
+export interface FacilitiesSummary {
+	total_trading_hubs: number;
+	total_trading_stations: number;
+	total_shipyards: number;
+	total_salvage_yards: number;
+	total_bars: number;
+	total_cartographers: number;
+	total_defense_platforms: number;
+	has_trading: boolean;
+	has_ship_services: boolean;
+	has_salvage: boolean;
+	has_cartographer: boolean;
+	has_bar: boolean;
+}
+
+export interface FacilitiesResponse {
+	system: {
+		uuid: string;
+		name: string;
+		is_inhabited: boolean;
+	};
+	facilities: {
+		trading_hubs: Facility[];
+		trading_stations: Facility[];
+		shipyards: Facility[];
+		salvage_yards: Facility[];
+		cartographers: Facility[];
+		bars: Facility[];
+		defense_platforms: Facility[];
+		summary: FacilitiesSummary;
+		available_actions: FacilityAction[];
+	};
+}
+
+export interface BarVisitResponse {
+	bar: {
+		uuid: string;
+		name: string;
+		location: string;
+	};
+	rumors: {
+		id: string;
+		text: string;
+		source?: string;
+		reliability?: 'unreliable' | 'questionable' | 'reliable' | 'verified';
+	}[];
+	patrons?: {
+		name: string;
+		description?: string;
+		has_mission?: boolean;
+	}[];
+}
+
+// Ship Catalog Response
+export interface ShipCatalogItem {
+	uuid: string;
+	name: string;
+	class: string;
+	description: string;
+	price: number;
+	base_hull: number;
+	base_shield: number;
+	base_fuel: number;
+	base_cargo: number;
+	base_weapons: number;
+	tier: string;
+	available: boolean;
+}
+
+// Mineral types
+export interface Mineral {
+	uuid: string;
+	name: string;
+	description?: string;
+	rarity: 'common' | 'uncommon' | 'rare' | 'very_rare' | 'legendary';
+	base_price: number;
+}
+
+export interface HubInventoryItem {
+	mineral: Mineral;
+	quantity: number;
+	buy_price: number;
+	sell_price: number;
+}
+
+export interface HubInventoryResponse {
+	hub: {
+		uuid: string;
+		name: string;
+	};
+	inventory: HubInventoryItem[];
+}
+
+export interface NearbyHub {
+	uuid: string;
+	name: string;
+	type: 'major' | 'minor';
+	location: {
+		uuid: string;
+		name: string;
+		distance: number;
+	};
+}
+
+export interface NearbyHubsResponse {
+	hubs: NearbyHub[];
+	search_radius: number;
+}
+
+export interface BuyMineralRequest {
+	player_uuid: string;
+	mineral_uuid: string;
+	quantity: number;
+}
+
+export interface BuyMineralResponse {
+	mineral: string;
+	quantity_bought: number;
+	price_per_unit: number;
+	total_cost: number;
+	remaining_credits: number;
+	cargo_used: number;
+	cargo_remaining: number;
+}
+
+export interface SellMineralRequest {
+	player_uuid: string;
+	mineral_uuid: string;
+	quantity: number;
+}
+
+export interface SellMineralResponse {
+	mineral: string;
+	quantity_sold: number;
+	price_per_unit: number;
+	total_earned: number;
+	new_credits: number;
+	cargo_freed: number;
+}
+
+// Cargo types
+export interface CargoItem {
+	mineral: {
+		uuid: string;
+		name: string;
+		rarity: string;
+	};
+	quantity: number;
+}
+
+export interface CargoResponse {
+	cargo_hold: number;
+	current_cargo: number;
+	available_space: number;
+	items: CargoItem[];
+}
+
+// Sector types
+export interface SectorSystem {
+	uuid: string;
+	name: string;
+	type: string;
+	x: number;
+	y: number;
+	is_inhabited: boolean;
+	is_known?: boolean; // In player's star charts
+	is_detected?: boolean; // Detected by sensors but not in charts
+}
+
+export interface SectorWarpGate {
+	uuid: string;
+	from_system_uuid: string;
+	to_system_uuid: string;
+	from: { x: number; y: number };
+	to: { x: number; y: number };
+	is_active: boolean;
+}
+
+export interface SectorDetailsResponse {
+	uuid: string;
+	name: string;
+	display_name?: string;
+	galaxy: {
+		uuid: string;
+		name: string;
+	};
+	bounds: {
+		x_min: number;
+		x_max: number;
+		y_min: number;
+		y_max: number;
+	};
+	danger_level: number;
+	grid: { x: number; y: number };
+	statistics: {
+		total_systems: number;
+		inhabited_systems: number;
+		active_players: number;
+		pirate_fleets: number;
+	};
+	systems: SectorSystem[];
+	warp_gates?: SectorWarpGate[];
+}
+
+const DEFAULT_TIMEOUT = 10000; // 10 seconds
+const LONG_TIMEOUT = 600000; // 10 minutes for long-running operations like galaxy creation
+
+interface RequestOptions extends RequestInit {
+	timeout?: number;
+}
+
+async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
 	const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+	const { timeout = DEFAULT_TIMEOUT, ...fetchOptions } = options;
 
 	const headers: HeadersInit = {
 		Accept: 'application/json',
 		'Content-Type': 'application/json',
 		...(token && { Authorization: `Bearer ${token}` }),
-		...options.headers
+		...fetchOptions.headers
 	};
 
 	const controller = new AbortController();
-	const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+	const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 	try {
 		const response = await fetch(`${API_BASE}${endpoint}`, {
-			...options,
+			...fetchOptions,
 			headers,
 			signal: controller.signal
 		});
@@ -656,7 +1234,8 @@ export const api = {
 		}) {
 			return request<GalaxyCreationResult>('/galaxies/create', {
 				method: 'POST',
-				body: JSON.stringify(data)
+				body: JSON.stringify(data),
+				timeout: LONG_TIMEOUT // Galaxy creation can take several minutes
 			});
 		},
 
@@ -682,6 +1261,10 @@ export const api = {
 		// Galaxy membership
 		async getMyPlayer(galaxyUuid: string) {
 			return request<PlayerData>(`/galaxies/${galaxyUuid}/my-player`);
+		},
+
+		async getMyShip(galaxyUuid: string) {
+			return request<MyShipResponse>(`/galaxies/${galaxyUuid}/my-ship`);
 		},
 
 		async join(galaxyUuid: string, data?: JoinGalaxyRequest) {
@@ -795,6 +1378,71 @@ export const api = {
 
 		async getShips(playerUuid: string) {
 			return request<Ship[]>(`/players/${playerUuid}/ships`);
+		},
+
+		// Get player's current location with details
+		async getLocation(playerUuid: string) {
+			return request<PlayerLocationResponse>(`/players/${playerUuid}/location`);
+		},
+
+		// Get local orbital bodies at player's current star system
+		async getLocalBodies(playerUuid: string) {
+			return request<LocalBodiesResponse>(`/players/${playerUuid}/local-bodies`);
+		},
+
+		// Get player's cargo manifest
+		async getCargo(playerUuid: string) {
+			return request<CargoResponse>(`/players/${playerUuid}/cargo`);
+		},
+
+		// Star system endpoints
+		async getStarSystems(
+			playerUuid: string,
+			filters?: { known?: boolean; inhabited?: boolean; scanned?: boolean; charted?: boolean }
+		) {
+			const params = new URLSearchParams();
+			if (filters) {
+				if (filters.known !== undefined) params.append('known', String(filters.known));
+				if (filters.inhabited !== undefined) params.append('inhabited', String(filters.inhabited));
+				if (filters.scanned !== undefined) params.append('scanned', String(filters.scanned));
+				if (filters.charted !== undefined) params.append('charted', String(filters.charted));
+			}
+			const query = params.toString();
+			return request<StarSystemListResponse>(
+				`/players/${playerUuid}/star-systems${query ? `?${query}` : ''}`
+			);
+		},
+
+		async getStarSystem(playerUuid: string, systemUuid: string) {
+			return request<StarSystemDetails>(`/players/${playerUuid}/star-systems/${systemUuid}`);
+		},
+
+		async getCurrentSystem(playerUuid: string) {
+			return request<StarSystemDetails>(`/players/${playerUuid}/current-system`);
+		},
+
+		// Travel to a destination (warp gate or star system)
+		async travel(playerUuid: string, destinationUuid: string) {
+			return request<TravelResponse>(`/players/${playerUuid}/travel`, {
+				method: 'POST',
+				body: JSON.stringify({ destination_uuid: destinationUuid })
+			});
+		},
+
+		// Facilities endpoints
+		async getFacilities(playerUuid: string) {
+			return request<FacilitiesResponse>(`/players/${playerUuid}/facilities`);
+		},
+
+		async visitBar(playerUuid: string) {
+			return request<BarVisitResponse>(`/players/${playerUuid}/facilities/bar`);
+		}
+	},
+
+	// Ships endpoints
+	ships: {
+		async getCatalog() {
+			return request<ShipCatalogItem[]>('/ships/catalog');
 		}
 	},
 
@@ -815,6 +1463,46 @@ export const api = {
 
 		async getShipyard(hubUuid: string) {
 			return request<ShipyardResponse>(`/trading-hubs/${hubUuid}/shipyard`);
+		},
+
+		async list(playerUuid: string, radius?: number) {
+			const params = new URLSearchParams({ player_uuid: playerUuid });
+			if (radius !== undefined) {
+				params.append('radius', radius.toString());
+			}
+			return request<NearbyHubsResponse>(`/trading-hubs?${params.toString()}`);
+		},
+
+		async getInventory(hubUuid: string) {
+			return request<HubInventoryResponse>(`/trading-hubs/${hubUuid}/inventory`);
+		},
+
+		async buy(hubUuid: string, data: BuyMineralRequest) {
+			return request<BuyMineralResponse>(`/trading-hubs/${hubUuid}/buy`, {
+				method: 'POST',
+				body: JSON.stringify(data)
+			});
+		},
+
+		async sell(hubUuid: string, data: SellMineralRequest) {
+			return request<SellMineralResponse>(`/trading-hubs/${hubUuid}/sell`, {
+				method: 'POST',
+				body: JSON.stringify(data)
+			});
+		}
+	},
+
+	// Minerals endpoints
+	minerals: {
+		async list() {
+			return request<Mineral[]>('/minerals');
+		}
+	},
+
+	// Sectors endpoints
+	sectors: {
+		async get(sectorUuid: string) {
+			return request<SectorDetailsResponse>(`/sectors/${sectorUuid}`);
 		}
 	}
 };

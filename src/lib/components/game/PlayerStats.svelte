@@ -2,67 +2,76 @@
 	import StatBar from './StatBar.svelte';
 
 	interface Props {
-		hull: { current: number; max: number };
-		shield: { current: number; max: number; grade?: string };
-		fuel: { current: number; max: number };
+		hasShip: boolean;
+		hull?: { current: number; max: number };
+		shield?: { current: number; max: number; grade?: string };
+		fuel?: { current: number; max: number };
 		distance?: number;
 		cooldown?: number;
 		collision?: boolean;
 		clamp?: boolean;
 	}
 
-	let { hull, shield, fuel, distance, cooldown, collision, clamp }: Props = $props();
+	let { hasShip, hull, shield, fuel, distance, cooldown, collision, clamp }: Props = $props();
 </script>
 
 <aside class="player-stats">
 	<div class="stats-header">
 		<span class="header-icon">&#9632;</span>
-		<span>Player States</span>
+		<span>Ship Status</span>
 	</div>
 
-	<div class="stats-content">
-		<StatBar label="Hull" current={hull.current} max={hull.max} color="red" />
+	{#if hasShip && hull && shield && fuel}
+		<div class="stats-content">
+			<StatBar label="Hull" current={hull.current} max={hull.max} color="red" />
 
-		<StatBar
-			label="Shield"
-			current={shield.current}
-			max={shield.max}
-			color="blue"
-			suffix={shield.grade}
-		/>
+			<StatBar
+				label="Shield"
+				current={shield.current}
+				max={shield.max}
+				color="blue"
+				suffix={shield.grade}
+			/>
 
-		<StatBar label="Fuel" current={fuel.current} max={fuel.max} color="orange" />
+			<StatBar label="Fuel" current={fuel.current} max={fuel.max} color="orange" />
 
-		<div class="nav-section">
-			<div class="nav-header">Nav Status</div>
+			<div class="nav-section">
+				<div class="nav-header">Nav Status</div>
 
-			<div class="nav-indicators">
-				<div class="nav-item">
-					<span class="nav-label">Distance</span>
-					<span class="nav-value">{distance?.toFixed(1) ?? '0.0'}</span>
-				</div>
+				<div class="nav-indicators">
+					<div class="nav-item">
+						<span class="nav-label">Distance</span>
+						<span class="nav-value">{distance?.toFixed(1) ?? '0.0'}</span>
+					</div>
 
-				<div class="nav-item">
-					<span class="nav-label">Cooldown</span>
-					<span class="nav-value">{cooldown ?? 0}</span>
-				</div>
+					<div class="nav-item">
+						<span class="nav-label">Cooldown</span>
+						<span class="nav-value">{cooldown ?? 0}</span>
+					</div>
 
-				<div class="nav-item">
-					<span class="nav-label">Collision</span>
-					<span class="nav-indicator" class:active={collision} class:warning={collision}>
-						{collision ? 'WARN' : 'OK'}
-					</span>
-				</div>
+					<div class="nav-item">
+						<span class="nav-label">Collision</span>
+						<span class="nav-indicator" class:active={collision} class:warning={collision}>
+							{collision ? 'WARN' : 'OK'}
+						</span>
+					</div>
 
-				<div class="nav-item">
-					<span class="nav-label">Clamp</span>
-					<span class="nav-indicator" class:active={clamp}>
-						{clamp ? 'LOCKED' : 'FREE'}
-					</span>
+					<div class="nav-item">
+						<span class="nav-label">Clamp</span>
+						<span class="nav-indicator" class:active={clamp}>
+							{clamp ? 'LOCKED' : 'FREE'}
+						</span>
+					</div>
 				</div>
 			</div>
 		</div>
-	</div>
+	{:else}
+		<div class="no-ship-content">
+			<div class="no-ship-icon">🚀</div>
+			<p class="no-ship-message">No Ship Assigned</p>
+			<p class="no-ship-hint">Visit the Salvage Yard to purchase a ship</p>
+		</div>
+	{/if}
 </aside>
 
 <style>
@@ -152,5 +161,34 @@
 	.nav-indicator.warning {
 		background: rgba(245, 158, 11, 0.2);
 		color: #fbbf24;
+	}
+
+	/* No Ship State */
+	.no-ship-content {
+		padding: 1.5rem 1rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 0.5rem;
+	}
+
+	.no-ship-icon {
+		font-size: 2rem;
+		opacity: 0.5;
+	}
+
+	.no-ship-message {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: #e2e8f0;
+		margin: 0;
+	}
+
+	.no-ship-hint {
+		font-size: 0.75rem;
+		color: #718096;
+		margin: 0;
+		line-height: 1.4;
 	}
 </style>

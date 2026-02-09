@@ -35,9 +35,8 @@
 	let refreshInterval = $state<ReturnType<typeof setInterval> | null>(null);
 
 	const gameModes: { id: GameMode; label: string; icon: string; desc: string }[] = [
-		{ id: 'multiplayer', label: 'Multiplayer', icon: '\u{1F465}', desc: 'Real players only' },
-		{ id: 'single_player', label: 'Solo', icon: '\u{1F464}', desc: 'Private with NPCs' },
-		{ id: 'mixed', label: 'Mixed', icon: '\u{1F310}', desc: 'Players + NPCs' }
+		{ id: 'multiplayer', label: 'Multiplayer', icon: '\u{1F465}', desc: 'Open to all players' },
+		{ id: 'single_player', label: 'Solo', icon: '\u{1F464}', desc: 'Private game' }
 	];
 
 	// Size tier options with graphics
@@ -243,8 +242,9 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="modal-overlay"
-		onclick={closeCreateModal}
-		onkeydown={(e) => e.key === 'Escape' && closeCreateModal()}
+		class:locked={isCreating}
+		onclick={() => !isCreating && closeCreateModal()}
+		onkeydown={(e) => e.key === 'Escape' && !isCreating && closeCreateModal()}
 	>
 		<div
 			class="modal"
@@ -540,6 +540,10 @@
 		justify-content: center;
 		z-index: 100;
 		padding: 1rem;
+	}
+
+	.modal-overlay.locked {
+		cursor: not-allowed;
 	}
 
 	.modal {
