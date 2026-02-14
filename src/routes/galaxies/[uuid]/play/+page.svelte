@@ -262,6 +262,7 @@
 					sector={playerState.currentSector ?? playerState.locationDetails?.sector ?? null}
 					gridSize={playerState.galaxyGridSize}
 					currentSystemUuid={playerState.currentSystem?.uuid}
+					onNavigateToMap={navigateToMap}
 				/>
 			</div>
 

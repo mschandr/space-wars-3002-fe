@@ -10,12 +10,13 @@
 		cooldown?: number;
 		collision?: boolean;
 		clamp?: boolean;
+		compact?: boolean;
 	}
 
-	let { hasShip, hull, shield, fuel, distance, cooldown, collision, clamp }: Props = $props();
+	let { hasShip, hull, shield, fuel, distance, cooldown, collision, clamp, compact = false }: Props = $props();
 </script>
 
-<aside class="player-stats">
+<aside class="player-stats" class:compact>
 	<div class="stats-header">
 		<span class="header-icon">&#9632;</span>
 		<span>Ship Status</span>
@@ -35,35 +36,37 @@
 
 			<StatBar label="Fuel" current={fuel.current} max={fuel.max} color="orange" />
 
-			<div class="nav-section">
-				<div class="nav-header">Nav Status</div>
+			{#if !compact}
+				<div class="nav-section">
+					<div class="nav-header">Nav Status</div>
 
-				<div class="nav-indicators">
-					<div class="nav-item">
-						<span class="nav-label">Distance</span>
-						<span class="nav-value">{distance?.toFixed(1) ?? '0.0'}</span>
-					</div>
+					<div class="nav-indicators">
+						<div class="nav-item">
+							<span class="nav-label">Distance</span>
+							<span class="nav-value">{distance?.toFixed(1) ?? '0.0'}</span>
+						</div>
 
-					<div class="nav-item">
-						<span class="nav-label">Cooldown</span>
-						<span class="nav-value">{cooldown ?? 0}</span>
-					</div>
+						<div class="nav-item">
+							<span class="nav-label">Cooldown</span>
+							<span class="nav-value">{cooldown ?? 0}</span>
+						</div>
 
-					<div class="nav-item">
-						<span class="nav-label">Collision</span>
-						<span class="nav-indicator" class:active={collision} class:warning={collision}>
-							{collision ? 'WARN' : 'OK'}
-						</span>
-					</div>
+						<div class="nav-item">
+							<span class="nav-label">Collision</span>
+							<span class="nav-indicator" class:active={collision} class:warning={collision}>
+								{collision ? 'WARN' : 'OK'}
+							</span>
+						</div>
 
-					<div class="nav-item">
-						<span class="nav-label">Clamp</span>
-						<span class="nav-indicator" class:active={clamp}>
-							{clamp ? 'LOCKED' : 'FREE'}
-						</span>
+						<div class="nav-item">
+							<span class="nav-label">Clamp</span>
+							<span class="nav-indicator" class:active={clamp}>
+								{clamp ? 'LOCKED' : 'FREE'}
+							</span>
+						</div>
 					</div>
 				</div>
-			</div>
+			{/if}
 		</div>
 	{:else}
 		<div class="no-ship-content">
@@ -81,6 +84,19 @@
 		border: 1px solid #4a5568;
 		border-radius: 8px;
 		overflow: hidden;
+	}
+
+	.player-stats.compact {
+		width: 100%;
+	}
+
+	.player-stats.compact .stats-content {
+		padding: 0.5rem;
+	}
+
+	.player-stats.compact .stats-header {
+		padding: 0.35rem 0.6rem;
+		font-size: 0.75rem;
 	}
 
 	.stats-header {

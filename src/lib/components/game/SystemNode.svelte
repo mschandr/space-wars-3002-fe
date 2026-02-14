@@ -13,6 +13,7 @@
 		x: number;
 		y: number;
 		scanLevel: number;
+		color?: string;
 		hasWarpGate: boolean;
 		isInhabited: boolean;
 		isHazardous: boolean;
@@ -43,6 +44,7 @@
 		x,
 		y,
 		scanLevel,
+		color,
 		hasWarpGate,
 		isInhabited,
 		isHazardous,
@@ -76,6 +78,8 @@
 	}
 
 	const scanColor = $derived(SCAN_COLORS[scanLevel] ?? SCAN_COLORS[0]);
+	const fillColor = $derived(color ?? scanColor.color);
+	const fillOpacity = $derived(color ? 1.0 : scanColor.opacity);
 
 	// Determine if node should be visible based on filters
 	const isVisible = $derived(() => {
@@ -119,8 +123,8 @@
 		<!-- Main star circle -->
 		<circle
 			r={nodeSize}
-			fill={scanColor.color}
-			opacity={scanColor.opacity}
+			fill={fillColor}
+			opacity={fillOpacity}
 			stroke={isSelected ? '#4299e1' : 'rgba(255,255,255,0.2)'}
 			stroke-width={isSelected ? 2 : 1}
 		/>

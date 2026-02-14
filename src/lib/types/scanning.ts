@@ -74,6 +74,13 @@ export interface SystemConnection {
 	distance: number;
 }
 
+// Warp lane for galaxy map rendering
+export interface MapWarpLane {
+	from_system_uuid: string;
+	to_system_uuid: string;
+	is_active: boolean;
+}
+
 // Map data types
 export interface MapSystemData {
 	uuid: string;
@@ -97,6 +104,35 @@ export interface MapData {
 		x: number;
 		y: number;
 	};
+	warp_lanes?: MapWarpLane[];
+}
+
+// Sector data from galaxy map endpoint
+export interface MapSector {
+	uuid: string;
+	name: string;
+	x_min: number;
+	x_max: number;
+	y_min: number;
+	y_max: number;
+	danger_level: number;
+}
+
+// Enriched sector for the sector map view (derived client-side)
+export interface SectorViewEntry {
+	uuid: string;
+	name: string;
+	bounds: { x_min: number; x_max: number; y_min: number; y_max: number };
+	gridX: number;
+	gridY: number;
+	danger_level: number;
+	total_systems: number;
+	scanned_systems: number;
+	inhabited_systems: number;
+	has_warp_gate: boolean;
+	has_trading?: boolean;
+	player_count?: number;
+	fog: 'revealed' | 'adjacent' | 'hidden';
 }
 
 // Ship and player types
@@ -121,6 +157,125 @@ export interface SystemFeature {
 	name: string;
 	uuid: string;
 	available: boolean;
+}
+
+// --- Knowledge System Types (fog-of-war from server) ---
+
+export interface KnownSystem {
+	poi_uuid: string;
+	x: number;
+	y: number;
+	knowledge_level: number; // 0-4: UNKNOWN, DETECTED, BASIC, SURVEYED, VISITED
+	knowledge_label: string;
+	freshness: number; // 0.0 - 1.0
+	source: string;
+	// Server sends stellar data nested under `star` — normalize on receive to flat fields
+	star?: {
+		type?: string;
+		stellar_class?: string;
+		stellar_description?: string;
+		temperature_range_k?: { min: number; max: number };
+	};
+	// Flat fields (populated by normalizeKnownSystem from star.*)
+	name?: string; // level >= 2
+	stellar_class?: string; // level >= 1 (e.g. "G", "M", "K")
+	stellar_description?: string; // level >= 1 (e.g. "Yellow dwarf")
+	temperature_range_k?: { min: number; max: number }; // level >= 2 (class-based range)
+	is_inhabited?: boolean; // level >= 2
+	temperature_k?: number; // level >= 3 (precise)
+	luminosity?: number; // level >= 3
+	goldilocks_zone?: { inner: number; outer: number }; // level >= 3
+	planet_count?: number; // level >= 3
+	services?: Record<string, boolean>; // level >= 3
+	pirate_warning?: boolean;
+	scan_level?: number; // independent 0-9 detail scan
+	has_scan_data?: boolean;
+}
+
+/** Flatten nested `star` fields onto the top-level KnownSystem object */
+export function normalizeKnownSystem(sys: KnownSystem): KnownSystem {
+	if (!sys.star) return sys;
+	return {
+		...sys,
+		stellar_class: sys.stellar_class ?? sys.star.stellar_class,
+		stellar_description: sys.stellar_description ?? sys.star.stellar_description,
+		temperature_range_k: sys.temperature_range_k ?? sys.star.temperature_range_k
+	};
+}
+
+export interface KnownLane {
+	gate_uuid: string;
+	from_poi_uuid: string;
+	to_poi_uuid: string;
+	from: { x: number; y: number };
+	to: { x: number; y: number };
+	has_pirate: boolean;
+	pirate_freshness?: number;
+	discovery_method: string;
+}
+
+export interface DangerZone {
+	center: { x: number; y: number };
+	radius_ly: number;
+	source: string;
+	confidence: number;
+}
+
+export interface KnowledgeMapData {
+	galaxy: { uuid: string; name: string; width: number; height: number };
+	player: { uuid: string; x: number; y: number; system_uuid: string; sensor_range_ly: number };
+	known_systems: KnownSystem[];
+	known_lanes: KnownLane[];
+	danger_zones: DangerZone[];
+	statistics: { total_known: number; total_visited: number; total_lanes: number };
+}
+
+export interface SectorMapEntry {
+	uuid: string;
+	name: string;
+	grid_x: number;
+	grid_y: number;
+	bounds: { x_min: number; x_max: number; y_min: number; y_max: number };
+	danger_level: number;
+	total_systems: number;
+	inhabited_systems: number;
+	has_trading: boolean;
+	player_count: number;
+}
+
+export interface SectorMapData {
+	sectors: SectorMapEntry[];
+	grid_size: { cols: number; rows: number };
+}
+
+// Knowledge level color/opacity mapping (replaces SCAN_COLORS for map view)
+export const KNOWLEDGE_COLORS: Record<number, { color: string; opacity: number; label: string }> = {
+	0: { color: '#1a1a2e', opacity: 0.0, label: 'Unknown' },
+	1: { color: '#4a5568', opacity: 0.3, label: 'Detected' },
+	2: { color: '#3b82f6', opacity: 0.5, label: 'Basic' },
+	3: { color: '#10b981', opacity: 0.8, label: 'Surveyed' },
+	4: { color: '#f59e0b', opacity: 1.0, label: 'Visited' }
+};
+
+// Stellar spectral class colors (for star dots on the map)
+export const STELLAR_COLORS: Record<string, string> = {
+	O: '#6b8bff', // Blue
+	B: '#9bb0ff', // Blue-white
+	A: '#cad8ff', // White
+	F: '#f8f0d0', // Yellow-white
+	G: '#ffd700', // Yellow (Sol-like)
+	K: '#ff8c00', // Orange
+	M: '#e05030', // Red
+};
+
+// Returns the color for a stellar class, falling back to knowledge-level color
+export function stellarColor(sys: KnownSystem): string {
+	if (sys.stellar_class) {
+		// Match first letter (e.g. "G2V" → "G")
+		const spectral = sys.stellar_class.charAt(0).toUpperCase();
+		if (STELLAR_COLORS[spectral]) return STELLAR_COLORS[spectral];
+	}
+	return KNOWLEDGE_COLORS[sys.knowledge_level]?.color ?? '#4a5568';
 }
 
 // Scan level color mapping for fog-of-war

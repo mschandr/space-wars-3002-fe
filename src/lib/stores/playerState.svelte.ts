@@ -8,6 +8,7 @@ import {
 	type TravelResponse,
 	type FacilitiesResponse
 } from '$lib/api';
+import type { KnowledgeMapData, SectorMapData } from '$lib/types/scanning';
 import { getGalaxyFromCache } from '$lib/galaxyCache';
 
 export interface SystemInfo {
@@ -73,6 +74,9 @@ interface PlayerState {
 	isTraveling: boolean;
 	travelDestination: string | null;
 	travelStatus: string | null;
+	knowledgeMap: KnowledgeMapData | null;
+	knowledgeMapStale: boolean;
+	sectorMap: SectorMapData | null;
 	needsCreation: boolean;
 	error: string | null;
 }
@@ -104,6 +108,9 @@ function createPlayerState() {
 		isTraveling: false,
 		travelDestination: null,
 		travelStatus: null,
+		knowledgeMap: null,
+		knowledgeMapStale: false,
+		sectorMap: null,
 		needsCreation: false,
 		error: null
 	});
@@ -670,8 +677,11 @@ function createPlayerState() {
 		try {
 			const response = await api.players.getBulkScanLevels(state.playerUuid, poiUuids);
 			if (response.success && response.data) {
-				for (const entry of response.data.scan_levels) {
-					state.scanLevels[entry.poi_uuid] = entry.scan_level;
+				const levels = response.data.scan_levels;
+				if (Array.isArray(levels)) {
+					for (const entry of levels) {
+						state.scanLevels[entry.poi_uuid] = entry.scan_level;
+					}
 				}
 			}
 		} catch (err) {
@@ -681,6 +691,59 @@ function createPlayerState() {
 
 	function getScanLevel(poiUuid: string): number {
 		return state.scanLevels[poiUuid] ?? 0;
+	}
+
+	// Knowledge map: load from server (or return cached if fresh)
+	async function loadKnowledgeMap(sectorUuid?: string): Promise<KnowledgeMapData | null> {
+		if (!state.playerUuid) return null;
+
+		// Return cached data if not stale and no sector filter change
+		if (state.knowledgeMap && !state.knowledgeMapStale && !sectorUuid) {
+			return state.knowledgeMap;
+		}
+
+		try {
+			const response = await api.players.getKnowledgeMap(state.playerUuid, sectorUuid);
+			if (response.success && response.data) {
+				// Only cache the full (unfiltered) result
+				if (!sectorUuid) {
+					state.knowledgeMap = response.data;
+					state.knowledgeMapStale = false;
+				}
+				return response.data;
+			} else {
+				console.error('[PlayerState] Failed to load knowledge map:', response.error);
+			}
+		} catch (err) {
+			console.error('[PlayerState] Error loading knowledge map:', err);
+		}
+		return null;
+	}
+
+	// Sector map: load once per galaxy and cache
+	async function loadSectorMap(): Promise<SectorMapData | null> {
+		if (!state.galaxyUuid) return null;
+
+		// Return cached (static data, doesn't change)
+		if (state.sectorMap) return state.sectorMap;
+
+		try {
+			const response = await api.galaxies.getSectorMap(state.galaxyUuid);
+			if (response.success && response.data) {
+				state.sectorMap = response.data;
+				return response.data;
+			} else {
+				console.error('[PlayerState] Failed to load sector map:', response.error);
+			}
+		} catch (err) {
+			console.error('[PlayerState] Error loading sector map:', err);
+		}
+		return null;
+	}
+
+	// Mark knowledge map as stale so it refetches on next map visit
+	function invalidateKnowledgeMap() {
+		state.knowledgeMapStale = true;
 	}
 
 	// Travel to a destination (warp gate or star system)
@@ -767,6 +830,7 @@ function createPlayerState() {
 
 									state.locationDetails = null;
 								state.facilities = null;
+								invalidateKnowledgeMap();
 
 									// Ensure minimum display time
 									const elapsed = Date.now() - startTime;
@@ -827,6 +891,7 @@ function createPlayerState() {
 				// Clear location details and facilities - will need to reload for new location
 				state.locationDetails = null;
 				state.facilities = null;
+				invalidateKnowledgeMap();
 
 				// Ensure minimum display time for the warp animation
 				const elapsed = Date.now() - startTime;
@@ -878,6 +943,9 @@ function createPlayerState() {
 		state.isTraveling = false;
 		state.travelDestination = null;
 		state.travelStatus = null;
+		state.knowledgeMap = null;
+		state.knowledgeMapStale = false;
+		state.sectorMap = null;
 		state.needsCreation = false;
 		state.error = null;
 	}
@@ -958,6 +1026,15 @@ function createPlayerState() {
 		get travelStatus() {
 			return state.travelStatus;
 		},
+		get knowledgeMap() {
+			return state.knowledgeMap;
+		},
+		get knowledgeMapStale() {
+			return state.knowledgeMapStale;
+		},
+		get sectorMap() {
+			return state.sectorMap;
+		},
 		get needsCreation() {
 			return state.needsCreation;
 		},
@@ -983,6 +1060,9 @@ function createPlayerState() {
 		getCargoItem,
 		getAvailableCargoSpace,
 		travel,
+		loadKnowledgeMap,
+		loadSectorMap,
+		invalidateKnowledgeMap,
 		reset
 	};
 }

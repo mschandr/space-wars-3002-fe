@@ -1,3 +1,5 @@
+import type { KnowledgeMapData, SectorMapData } from '$lib/types/scanning';
+
 const API_BASE = '/api';
 
 export interface ApiResponse<T> {
@@ -1223,6 +1225,7 @@ export const api = {
 			return request<unknown>(`/galaxies/${uuid}/map`);
 		},
 
+
 		async create(data: {
 			size_tier: SizeTier;
 			game_mode: GameMode;
@@ -1272,6 +1275,10 @@ export const api = {
 				method: 'POST',
 				body: JSON.stringify(data ?? {})
 			});
+		},
+
+		async getSectorMap(galaxyUuid: string) {
+			return request<SectorMapData>(`/galaxies/${galaxyUuid}/sector-map`);
 		}
 	},
 
@@ -1436,6 +1443,11 @@ export const api = {
 
 		async visitBar(playerUuid: string) {
 			return request<BarVisitResponse>(`/players/${playerUuid}/facilities/bar`);
+		},
+
+		async getKnowledgeMap(playerUuid: string, sectorUuid?: string) {
+			const params = sectorUuid ? `?sector_uuid=${sectorUuid}` : '';
+			return request<KnowledgeMapData>(`/players/${playerUuid}/knowledge-map${params}`);
 		}
 	},
 
