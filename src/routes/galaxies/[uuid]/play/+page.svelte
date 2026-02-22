@@ -8,12 +8,15 @@
 	import SystemMenu from '$lib/components/game/SystemMenu.svelte';
 	import ActionPanel from '$lib/components/game/ActionPanel.svelte';
 	import SectorGrid from '$lib/components/game/SectorGrid.svelte';
+	import CargoManifest from '$lib/components/game/CargoManifest.svelte';
 	import SpaceLoader from '$lib/components/SpaceLoader.svelte';
 
 	// Menu item types matching SystemMenu
 	type MenuItemId =
 		| 'planets'
 		| 'warp'
+		| 'manual_jump'
+		| 'market_news'
 		| 'trading_hub'
 		| 'shipyard'
 		| 'salvage'
@@ -32,21 +35,32 @@
 	let activeMenuItem = $state<MenuItemId | null>(null);
 
 	// Get available services from facilities (preferred) or location details (fallback)
+	// Merges hub sub-services with top-level facility categories (bars, trading stations, etc.)
 	const availableServices = $derived.by(() => {
 		const facilities = playerState.facilities;
-		if (facilities?.facilities?.summary) {
-			const summary = facilities.facilities.summary;
-			const services: string[] = [];
-			if (summary.has_trading) services.push('trading_hub');
-			if (summary.has_ship_services) services.push('shipyard');
-			if (summary.has_salvage) services.push('salvage');
-			if (summary.has_cartographer) services.push('cartographer');
-			if (summary.has_bar) services.push('bar');
-			// Add more based on facilities data
-			if (summary.total_trading_stations > 0) services.push('trading_hub');
-			return [...new Set(services)]; // Remove duplicates
+		const fac = facilities?.facilities;
+		if (!fac) {
+			return playerState.locationDetails?.has?.services ?? [];
 		}
-		// Fallback to location details
+
+		const services = new Set<string>();
+
+		// Hub sub-services (shipyard, salvage, cartography, etc.)
+		const hubs = fac.trading_hubs;
+		if (hubs && hubs.length > 0) {
+			for (const hub of hubs) {
+				if (hub.services) {
+					for (const s of hub.services) services.add(s);
+				}
+			}
+		}
+
+		// Top-level facility categories not covered by hub sub-services
+		if (fac.bars && fac.bars.length > 0) services.add('bar');
+		if (fac.trading_stations && fac.trading_stations.length > 0) services.add('trading_station');
+
+		if (services.size > 0) return [...services];
+
 		return playerState.locationDetails?.has?.services ?? [];
 	});
 
@@ -158,6 +172,11 @@
 	function navigateBack() {
 		goto(`${base}/galaxies`);
 	}
+
+	async function handleRenameShip(uuid: string, name: string): Promise<boolean> {
+		const result = await playerState.renameShip(uuid, name);
+		return !!result;
+	}
 </script>
 
 <svelte:head>
@@ -268,16 +287,32 @@
 
 			<ActionPanel activeItem={activeMenuItem} onAction={handleAction} onTravelComplete={handleTravelComplete} />
 
-			<PlayerStats
-				hasShip={!!playerState.activeShip}
-				hull={playerState.ship?.hull}
-				shield={playerState.ship?.shield}
-				fuel={playerState.ship?.fuel}
-				distance={45.2}
-				cooldown={0}
-				collision={false}
-				clamp={false}
-			/>
+			<div class="right-panel">
+				<PlayerStats
+					hasShip={!!playerState.activeShip}
+					hull={playerState.ship?.hull}
+					shield={playerState.ship?.shield}
+					fuel={playerState.ship?.fuel}
+					cargo={playerState.ship ? { used: playerState.ship.cargo_used, capacity: playerState.ship.cargo_capacity } : undefined}
+					weapons={playerState.ship?.weapons}
+					sensors={playerState.ship?.sensors}
+					warpDrive={playerState.ship?.warpDrive}
+					shipClass={playerState.ship?.shipClass?.class}
+					shipStatus={playerState.ship?.status}
+					shipName={playerState.activeShip?.name}
+					shipUuid={playerState.activeShip?.uuid}
+					onRename={handleRenameShip}
+					credits={playerState.credits}
+					level={playerState.level}
+					experience={playerState.experience}
+				/>
+
+				<CargoManifest
+					cargo={playerState.cargo}
+					capacity={playerState.cargoCapacity}
+					used={playerState.cargoUsed}
+				/>
+			</div>
 		</main>
 	{/if}
 </div>
@@ -414,6 +449,14 @@
 		flex-direction: column;
 		gap: 1rem;
 		width: 220px;
+		flex-shrink: 0;
+	}
+
+	.right-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		width: 240px;
 		flex-shrink: 0;
 	}
 

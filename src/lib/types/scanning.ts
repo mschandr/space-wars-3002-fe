@@ -162,7 +162,7 @@ export interface SystemFeature {
 // --- Knowledge System Types (fog-of-war from server) ---
 
 export interface KnownSystem {
-	poi_uuid: string;
+	uuid: string;
 	x: number;
 	y: number;
 	knowledge_level: number; // 0-4: UNKNOWN, DETECTED, BASIC, SURVEYED, VISITED
@@ -192,23 +192,44 @@ export interface KnownSystem {
 	has_scan_data?: boolean;
 }
 
-/** Flatten nested `star` fields onto the top-level KnownSystem object */
+/** Normalize a KnownSystem from the API response:
+ *  - Flatten nested `star.*` fields onto top-level
+ *  - Map legacy `poi_uuid` → `uuid` (BE migration in progress) */
 export function normalizeKnownSystem(sys: KnownSystem): KnownSystem {
-	if (!sys.star) return sys;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const raw = sys as any;
+	const uuid = sys.uuid ?? raw.poi_uuid;
+	const base = uuid !== sys.uuid ? { ...sys, uuid } : sys;
+	if (!base.star) return base;
 	return {
-		...sys,
-		stellar_class: sys.stellar_class ?? sys.star.stellar_class,
-		stellar_description: sys.stellar_description ?? sys.star.stellar_description,
-		temperature_range_k: sys.temperature_range_k ?? sys.star.temperature_range_k
+		...base,
+		stellar_class: base.stellar_class ?? base.star.stellar_class,
+		stellar_description: base.stellar_description ?? base.star.stellar_description,
+		temperature_range_k: base.temperature_range_k ?? base.star.temperature_range_k
+	};
+}
+
+/** Normalize a KnownLane from the API response:
+ *  - Map legacy `from_poi_uuid`/`to_poi_uuid` → `from_uuid`/`to_uuid` (BE migration in progress) */
+export function normalizeKnownLane(lane: KnownLane): KnownLane {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const raw = lane as any;
+	return {
+		...lane,
+		from_uuid: lane.from_uuid ?? raw.from_poi_uuid,
+		to_uuid: lane.to_uuid ?? raw.to_poi_uuid
 	};
 }
 
 export interface KnownLane {
 	gate_uuid: string;
-	from_poi_uuid: string;
-	to_poi_uuid: string;
+	from_uuid: string;
+	to_uuid: string;
+	from_name?: string;
+	to_name?: string;
 	from: { x: number; y: number };
 	to: { x: number; y: number };
+	distance: number;
 	has_pirate: boolean;
 	pirate_freshness?: number;
 	discovery_method: string;
@@ -223,7 +244,15 @@ export interface DangerZone {
 
 export interface KnowledgeMapData {
 	galaxy: { uuid: string; name: string; width: number; height: number };
-	player: { uuid: string; x: number; y: number; system_uuid: string; sensor_range_ly: number };
+	player: {
+		uuid: string;
+		x: number;
+		y: number;
+		system_uuid: string;
+		sector_uuid?: string;
+		sensor_range_ly: number;
+		sensor_level?: number;
+	};
 	known_systems: KnownSystem[];
 	known_lanes: KnownLane[];
 	danger_zones: DangerZone[];
@@ -246,6 +275,8 @@ export interface SectorMapEntry {
 export interface SectorMapData {
 	sectors: SectorMapEntry[];
 	grid_size: { cols: number; rows: number };
+	player_sector_uuid?: string;
+	player_location?: { x: number; y: number; system_uuid: string };
 }
 
 // Knowledge level color/opacity mapping (replaces SCAN_COLORS for map view)

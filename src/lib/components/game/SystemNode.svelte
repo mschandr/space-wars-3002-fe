@@ -130,7 +130,7 @@
 		/>
 
 		<!-- Feature indicators -->
-		{#if hasWarpGate && scanLevel >= 2}
+		{#if hasWarpGate && scanLevel >= 1}
 			<circle
 				r={nodeSize + 2}
 				fill="none"
@@ -147,6 +147,20 @@
 
 		{#if isHazardous && scanLevel >= 4}
 			<circle cx={-nodeSize - 2} cy={-nodeSize - 2} r="2" fill="#ef4444" />
+		{/if}
+
+		<!-- System name label for warp gate endpoints -->
+		{#if hasWarpGate && name !== '???' && !isPlayerLocation}
+			<text
+				y={nodeSize + 12}
+				text-anchor="middle"
+				fill="#a0aec0"
+				font-size="8"
+				font-weight="500"
+				class="system-label"
+			>
+				{name}
+			</text>
 		{/if}
 
 		<!-- Player location marker -->
@@ -222,6 +236,11 @@
 
 	.beacon-ring {
 		animation: beacon 3s ease-out infinite;
+	}
+
+	.system-label {
+		pointer-events: none;
+		opacity: 0.8;
 	}
 
 	.beacon-ring-outer {

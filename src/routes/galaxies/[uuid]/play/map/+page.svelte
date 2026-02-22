@@ -4,8 +4,9 @@
 	import { base } from '$app/paths';
 	import { auth } from '$lib/auth.svelte';
 	import { playerState } from '$lib/stores/playerState.svelte';
+	import { api, type FuelCostResponse } from '$lib/api';
 	import type { KnownSystem, KnownLane, DangerZone, SectorMapEntry, SectorViewEntry } from '$lib/types/scanning';
-	import { KNOWLEDGE_COLORS, STELLAR_COLORS, stellarColor, normalizeKnownSystem } from '$lib/types/scanning';
+	import { KNOWLEDGE_COLORS, STELLAR_COLORS, stellarColor, normalizeKnownSystem, normalizeKnownLane } from '$lib/types/scanning';
 	import PlayerStats from '$lib/components/game/PlayerStats.svelte';
 	import StarMap from '$lib/components/game/StarMap.svelte';
 	import SectorMap from '$lib/components/game/SectorMap.svelte';
@@ -32,6 +33,7 @@
 	let galaxyBounds = $state({ width: 1000, height: 1000 });
 	let sectorEntries = $state<SectorMapEntry[]>([]);
 	let gridDims = $state({ cols: 5, rows: 5 });
+	let apiPlayerSectorUuid = $state<string | undefined>(undefined);
 
 	// View toggle: sectors (default) vs stars
 	let mapView = $state<'sectors' | 'stars'>('sectors');
@@ -53,6 +55,34 @@
 	// Drill-down overlay
 	let drilldownSectorUuid = $state<string | null>(null);
 	let drilldownSectorName = $state('');
+
+	// Travel info for selected star
+	let fuelCostData = $state<FuelCostResponse | null>(null);
+	let fuelCostLoading = $state(false);
+
+	// Fetch fuel cost when a star is selected (locked)
+	$effect(() => {
+		const star = selectedMapStar;
+		const shipUuid = playerState.ship?.uuid;
+
+		if (!star || !shipUuid || star.uuid === playerMapPos.systemUuid) {
+			fuelCostData = null;
+			return;
+		}
+
+		fuelCostLoading = true;
+		api.travel.previewFuelCost(shipUuid, { poiUuid: star.uuid }).then((res) => {
+			if (res.success && res.data) {
+				fuelCostData = res.data;
+			} else {
+				fuelCostData = null;
+			}
+		}).catch(() => {
+			fuelCostData = null;
+		}).finally(() => {
+			fuelCostLoading = false;
+		});
+	});
 
 	onMount(() => {
 		const token = localStorage.getItem('auth_token');
@@ -92,13 +122,16 @@
 
 			if (kmResult) {
 				knownSystems = kmResult.known_systems.map(normalizeKnownSystem);
-				knownLanes = kmResult.known_lanes;
+				knownLanes = kmResult.known_lanes.map(normalizeKnownLane);
 				dangerZones = kmResult.danger_zones;
 				sensorRange = kmResult.player.sensor_range_ly;
+
+				// Extract player position (BE may send system_uuid or poi_uuid)
+				const p = kmResult.player as Record<string, unknown>;
 				playerMapPos = {
-					x: kmResult.player.x,
-					y: kmResult.player.y,
-					systemUuid: kmResult.player.system_uuid
+					x: p.x as number,
+					y: p.y as number,
+					systemUuid: (p.system_uuid ?? p.poi_uuid ?? '') as string
 				};
 				galaxyBounds = {
 					width: kmResult.galaxy.width,
@@ -106,9 +139,10 @@
 				};
 
 				// Ensure the player's current system is at least knowledge level 4
+				// Ensure the player's current system is at least knowledge level 4
 				const curSys = playerState.currentSystem;
 				if (curSys) {
-					const idx = knownSystems.findIndex(s => s.poi_uuid === curSys.uuid);
+					const idx = knownSystems.findIndex(s => s.uuid === curSys.uuid);
 					if (idx !== -1 && knownSystems[idx].knowledge_level < 4) {
 						knownSystems[idx] = {
 							...knownSystems[idx],
@@ -120,7 +154,7 @@
 					} else if (idx === -1) {
 						// Player's system missing from knowledge map — add it
 						knownSystems = [...knownSystems, {
-							poi_uuid: curSys.uuid,
+							uuid: curSys.uuid,
 							x: curSys.position.x,
 							y: curSys.position.y,
 							knowledge_level: 4,
@@ -131,6 +165,20 @@
 						}];
 					}
 				}
+				// Enrich gate-connected systems with names from known_lanes
+				const laneNames = new Map<string, string>();
+				for (const lane of knownLanes) {
+					if (lane.from_name) laneNames.set(lane.from_uuid, lane.from_name);
+					if (lane.to_name) laneNames.set(lane.to_uuid, lane.to_name);
+				}
+				if (laneNames.size > 0) {
+					knownSystems = knownSystems.map(sys => {
+						if (!sys.name && laneNames.has(sys.uuid)) {
+							return { ...sys, name: laneNames.get(sys.uuid) };
+						}
+						return sys;
+					});
+				}
 			} else {
 				loadError = 'Failed to load knowledge map';
 			}
@@ -138,6 +186,7 @@
 			if (smResult) {
 				sectorEntries = smResult.sectors;
 				gridDims = smResult.grid_size;
+				apiPlayerSectorUuid = smResult.player_sector_uuid;
 			}
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Unknown error loading map';
@@ -152,7 +201,7 @@
 	const sectorViewEntries = $derived.by((): SectorViewEntry[] => {
 		if (sectorEntries.length === 0) return [];
 
-		const playerSectorUuid = playerState.currentSector?.uuid;
+		const playerSectorUuid = apiPlayerSectorUuid ?? playerState.currentSector?.uuid;
 
 		// Build a set of sector UUIDs that contain at least one known system
 		const sectorSystemCounts = new Map<string, { known: number; inhabited: number }>();
@@ -251,12 +300,17 @@
 
 	function handleTravel() {
 		if (selectedSystem) {
-			console.log('Traveling to:', selectedSystem);
+			// TODO: implement travel from map
 		}
 	}
 
 	function closeMap() {
 		goto(`${base}/galaxies/${data.galaxyUuid}/play`);
+	}
+
+	async function handleRenameShip(uuid: string, name: string): Promise<boolean> {
+		const result = await playerState.renameShip(uuid, name);
+		return !!result;
 	}
 
 	function renderSystemInfo(sys: KnownSystem): { label: string; value: string; color?: string }[] {
@@ -371,7 +425,7 @@
 					knownSystems={knownSystems}
 					knownLanes={knownLanes}
 					gridSize={sectorGridSize}
-					playerSectorUuid={playerState.currentSector?.uuid}
+					playerSectorUuid={apiPlayerSectorUuid ?? playerState.currentSector?.uuid}
 					playerSystemUuid={playerState.currentSystem?.uuid}
 					onSectorClick={handleSectorClick}
 					onStarHover={(star) => hoveredMapStar = star}
@@ -385,15 +439,19 @@
 					hull={playerState.ship?.hull}
 					shield={playerState.ship?.shield}
 					fuel={playerState.ship?.fuel}
+					cargo={playerState.ship ? { used: playerState.ship.cargo_used, capacity: playerState.ship.cargo_capacity } : undefined}
 					compact={true}
+					shipName={playerState.activeShip?.name}
+					shipUuid={playerState.activeShip?.uuid}
+					onRename={handleRenameShip}
 				/>
 
 				<!-- System info panel -->
 				<div class="system-info-panel">
 					{#if displayMapStar}
 						<div class="sip-header">
-							<span class="sip-name" style="color: {starColor(displayMapStar)}">{displayMapStar.knowledge_level >= 2 && displayMapStar.name ? displayMapStar.name : 'Unknown System'}</span>
-							{#if displayMapStar.poi_uuid === playerState.currentSystem?.uuid}
+							<span class="sip-name" style="color: {starColor(displayMapStar)}">{displayMapStar.name ?? 'Unknown System'}</span>
+							{#if displayMapStar.uuid === playerState.currentSystem?.uuid}
 								<span class="sip-tag you">YOU</span>
 							{/if}
 							{#if selectedMapStar}
@@ -414,6 +472,46 @@
 								<div class="sip-pirate">PIRATE ACTIVITY</div>
 							{/if}
 						</div>
+
+						<!-- Travel info section -->
+						{#if selectedMapStar && displayMapStar.uuid !== playerMapPos.systemUuid}
+							<div class="sip-travel">
+								<span class="sip-travel-title">TRAVEL</span>
+								{#if fuelCostLoading}
+									<div class="sip-row">
+										<span class="sip-label">Distance</span>
+										<span class="sip-value" style="color: #718096">calculating...</span>
+									</div>
+								{:else if fuelCostData}
+									<div class="sip-row">
+										<span class="sip-label">Distance</span>
+										<span class="sip-value" style="color: #6bb8cc">{fuelCostData.distance.toFixed(1)} LY</span>
+									</div>
+									<div class="sip-row">
+										<span class="sip-label">Fuel Cost</span>
+										<span class="sip-value" style="color: #f6ad55">{fuelCostData.cheapest_fuel_cost ?? 'N/A'}</span>
+									</div>
+									<!-- TODO(human): Implement dual-option fuel cost breakdown showing warp_gate vs direct_jump details -->
+									{#if fuelCostData.cheapest_option}
+										<div class="sip-row">
+											<span class="sip-label">Via</span>
+											<span class="sip-value" style="color: #718096">{fuelCostData.cheapest_option === 'warp_gate' ? 'Warp Gate' : 'Direct Jump'}</span>
+										</div>
+									{/if}
+									<div class="sip-row">
+										<span class="sip-label">Can Reach</span>
+										<span class="sip-value" style="color: {fuelCostData.can_reach ? '#48bb78' : '#fc8181'}">
+											{fuelCostData.can_reach ? 'Yes' : 'No'} ({fuelCostData.ship.current_fuel} fuel)
+										</span>
+									</div>
+								{:else}
+									<div class="sip-row">
+										<span class="sip-label">Fuel Cost</span>
+										<span class="sip-value" style="color: #718096">unavailable</span>
+									</div>
+								{/if}
+							</div>
+						{/if}
 					{:else}
 						<div class="sip-empty">
 							<span class="sip-empty-label">SYSTEM INFO</span>
@@ -471,10 +569,15 @@
 				hull={playerState.ship?.hull}
 				shield={playerState.ship?.shield}
 				fuel={playerState.ship?.fuel}
-				distance={45.2}
-				cooldown={0}
-				collision={false}
-				clamp={false}
+				cargo={playerState.ship ? { used: playerState.ship.cargo_used, capacity: playerState.ship.cargo_capacity } : undefined}
+				weapons={playerState.ship?.weapons}
+				sensors={playerState.ship?.sensors}
+				warpDrive={playerState.ship?.warpDrive}
+				shipClass={playerState.ship?.shipClass?.class}
+				shipStatus={playerState.ship?.status}
+				shipName={playerState.activeShip?.name}
+				shipUuid={playerState.activeShip?.uuid}
+				onRename={handleRenameShip}
 			/>
 		</main>
 
@@ -722,6 +825,23 @@
 		border-radius: 3px;
 		text-align: center;
 		margin-top: 0.2rem;
+	}
+
+	.sip-travel {
+		margin-top: 0.4rem;
+		padding-top: 0.4rem;
+		border-top: 1px solid #2d3748;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.sip-travel-title {
+		font-size: 0.6rem;
+		font-weight: 600;
+		color: #6bb8cc;
+		letter-spacing: 0.1em;
+		margin-bottom: 0.1rem;
 	}
 
 	.sip-empty {

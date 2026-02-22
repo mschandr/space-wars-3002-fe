@@ -11,6 +11,8 @@
 	type MenuItemId =
 		| 'planets'
 		| 'warp'
+		| 'manual_jump'
+		| 'market_news'
 		| 'trading_hub'
 		| 'shipyard'
 		| 'salvage'
@@ -41,6 +43,12 @@
 		'commerce hub': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
 		trading_post: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
 		'trading post': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		mineral_trading: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		'mineral trading': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		mineral_trading_post: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		'mineral trading post': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		trading_station: { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
+		'trading station': { id: 'trading_hub', label: 'Trading Hub', icon: '\u{1F4B0}' },
 
 		// Salvage Yard variants
 		salvage_yard: { id: 'salvage', label: 'Salvage Yard', icon: '\u{1F527}' },
@@ -110,7 +118,9 @@
 	// Always-visible menu items
 	const coreMenuItems: { id: MenuItemId; label: string; icon: string }[] = [
 		{ id: 'planets', label: 'Star System', icon: '\u{1F30D}' },
-		{ id: 'warp', label: 'Warp Gates', icon: '\u{2728}' }
+		{ id: 'warp', label: 'Warp Gates', icon: '\u{2728}' },
+		{ id: 'manual_jump', label: 'Manual Jump', icon: '\u{2604}' },
+		{ id: 'market_news', label: 'Market News', icon: '\u{1F4F0}' }
 	];
 
 	// Dynamically build menu items based on available services
@@ -178,7 +188,7 @@
 		<!-- Separator if there are services -->
 		{#if dynamicMenuItems.length > 0}
 			<li class="menu-separator">
-				<span class="separator-label">Available Services</span>
+				<span class="separator-label">Trading Hub</span>
 			</li>
 
 			<!-- Dynamic service items -->
@@ -189,7 +199,28 @@
 						class:active={activeItem === item.id}
 						onclick={() => onSelect(item.id)}
 					>
-						<span class="item-icon">{item.icon}</span>
+						<span class="item-icon">
+							{#if item.id === 'cartographer'}
+								<svg viewBox="0 0 20 20" class="constellation-icon" aria-hidden="true">
+									<circle cx="4" cy="4" r="1.5" fill="#e2e8f0" />
+									<circle cx="12" cy="3" r="1" fill="#a0aec0" />
+									<circle cx="17" cy="7" r="1.3" fill="#e2e8f0" />
+									<circle cx="9" cy="10" r="1.8" fill="#fbbf24" />
+									<circle cx="3" cy="14" r="1" fill="#a0aec0" />
+									<circle cx="15" cy="15" r="1.2" fill="#e2e8f0" />
+									<circle cx="7" cy="18" r="1" fill="#a0aec0" />
+									<line x1="4" y1="4" x2="12" y2="3" stroke="#4a5568" stroke-width="0.5" />
+									<line x1="12" y1="3" x2="17" y2="7" stroke="#4a5568" stroke-width="0.5" />
+									<line x1="12" y1="3" x2="9" y2="10" stroke="#4a5568" stroke-width="0.5" />
+									<line x1="4" y1="4" x2="9" y2="10" stroke="#4a5568" stroke-width="0.5" />
+									<line x1="9" y1="10" x2="3" y2="14" stroke="#4a5568" stroke-width="0.5" />
+									<line x1="9" y1="10" x2="15" y2="15" stroke="#4a5568" stroke-width="0.5" />
+									<line x1="3" y1="14" x2="7" y2="18" stroke="#4a5568" stroke-width="0.5" />
+								</svg>
+							{:else}
+								{item.icon}
+							{/if}
+						</span>
 						<span class="item-label">{item.label}</span>
 					</button>
 				</li>
@@ -291,6 +322,14 @@
 		font-size: 1rem;
 		width: 1.25rem;
 		text-align: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.constellation-icon {
+		width: 1.15rem;
+		height: 1.15rem;
 	}
 
 	.item-label {

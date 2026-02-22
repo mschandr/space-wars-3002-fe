@@ -91,7 +91,7 @@
 			y: plotTop + (1 - (sys.y - b.y_min) / bh) * plotH,
 			knowledgeLevel: sys.knowledge_level,
 			freshness: sys.freshness,
-			isPlayer: sys.poi_uuid === playerSystemUuid
+			isPlayer: sys.uuid === playerSystemUuid
 		}));
 	});
 
@@ -102,7 +102,7 @@
 		const bw = b.x_max - b.x_min || 1;
 		const bh = b.y_max - b.y_min || 1;
 
-		const sectorUuids = new Set(sectorStars.map(s => s.poi_uuid));
+		const sectorUuids = new Set(sectorStars.map(s => s.uuid));
 
 		// Convert world coords to plot coords
 		const toPlot = (wx: number, wy: number) => ({
@@ -112,8 +112,8 @@
 
 		// Look up a destination label for an external system
 		const exitLabel = (poiUuid: string, wx: number, wy: number): string => {
-			const sys = knownSystems.find(s => s.poi_uuid === poiUuid);
-			if (sys?.name && sys.knowledge_level >= 2) return `\u2192 ${sys.name}`;
+			const sys = knownSystems.find(s => s.uuid === poiUuid);
+			if (sys?.name) return `\u2192 ${sys.name}`;
 			const sectorName = findSectorForPoint(wx, wy);
 			if (sectorName) return `\u2192 ${sectorName}`;
 			return '\u2192 Unknown';
@@ -127,10 +127,10 @@
 		};
 
 		return knownLanes
-			.filter(lane => sectorUuids.has(lane.from_poi_uuid) || sectorUuids.has(lane.to_poi_uuid))
+			.filter(lane => sectorUuids.has(lane.from_uuid) || sectorUuids.has(lane.to_uuid))
 			.reduce<LaneResult[]>((acc, lane) => {
-				const fromIn = sectorUuids.has(lane.from_poi_uuid);
-				const toIn = sectorUuids.has(lane.to_poi_uuid);
+				const fromIn = sectorUuids.has(lane.from_uuid);
+				const toIn = sectorUuids.has(lane.to_uuid);
 				// Skip lanes where both endpoints are outside (shouldn't happen after filter, but guard)
 				if (!fromIn && !toIn) return acc;
 
@@ -144,14 +144,14 @@
 					const clip = clipToPlot(toPlot_, fromPlot);
 					if (clip) {
 						result.from = clip.point;
-						result.exit = { point: clip.point, label: exitLabel(lane.from_poi_uuid, lane.from.x, lane.from.y), edge: clip.edge };
+						result.exit = { point: clip.point, label: exitLabel(lane.from_uuid, lane.from.x, lane.from.y), edge: clip.edge };
 					}
 				} else if (!toIn) {
 					// to is external — clip it
 					const clip = clipToPlot(fromPlot, toPlot_);
 					if (clip) {
 						result.to = clip.point;
-						result.exit = { point: clip.point, label: exitLabel(lane.to_poi_uuid, lane.to.x, lane.to.y), edge: clip.edge };
+						result.exit = { point: clip.point, label: exitLabel(lane.to_uuid, lane.to.x, lane.to.y), edge: clip.edge };
 					}
 				}
 
@@ -317,7 +317,7 @@
 
 	// Detail view star click — toggle selection
 	function handleStarClick(sys: KnownSystem) {
-		const next = selectedStar?.poi_uuid === sys.poi_uuid ? null : sys;
+		const next = selectedStar?.uuid === sys.uuid ? null : sys;
 		selectedStar = next;
 		onStarSelect?.(next);
 	}
@@ -450,7 +450,7 @@
 
 			<!-- Stars (all known in sector — server already filtered by knowledge) -->
 			{#each starPlots as star}
-				{@const isSelected = selectedStar?.poi_uuid === star.sys.poi_uuid}
+				{@const isSelected = selectedStar?.uuid === star.sys.uuid}
 				<g
 					class="star-node"
 					class:clickable={true}
@@ -482,8 +482,8 @@
 						pointer-events="none"
 					/>
 
-					<!-- Name label (knowledge_level >= 2) -->
-					{#if star.knowledgeLevel >= 2 && star.sys.name}
+					<!-- Name label (show if name is known, e.g. via warp lane data) -->
+					{#if star.sys.name}
 						<text x={star.x} y={star.y - starSize(star.knowledgeLevel) - 5}
 							text-anchor="middle" fill="#cbd5e0" font-size="8"
 							pointer-events="none"
@@ -503,6 +503,15 @@
 					{/if}
 				</g>
 			{/each}
+
+			<!-- Detail view legend -->
+			<text x={detailPad} y={detailH - 14} fill="#718096" font-size="8" font-weight="600">MARKERS:</text>
+			<circle cx={detailPad + 52} cy={detailH - 17} r="2.5" fill="#48bb78" />
+			<text x={detailPad + 58} y={detailH - 14} fill="#718096" font-size="7">Inhabited</text>
+			<text x={detailPad + 100} y={detailH - 13} fill="#fc8181" font-size="8" font-weight="bold">!</text>
+			<text x={detailPad + 108} y={detailH - 14} fill="#718096" font-size="7">Pirate Activity</text>
+			<circle cx={detailPad + 176} cy={detailH - 17} r="4" fill="none" stroke="#ef4444" stroke-width="1.5" />
+			<text x={detailPad + 184} y={detailH - 14} fill="#718096" font-size="7">You</text>
 		</svg>
 
 

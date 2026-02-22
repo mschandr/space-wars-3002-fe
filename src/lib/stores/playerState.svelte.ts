@@ -6,7 +6,9 @@ import {
 	type HubInventoryItem,
 	type MyShipResponse,
 	type TravelResponse,
-	type FacilitiesResponse
+	type FacilitiesResponse,
+	type MarketEvent,
+	type MarketEventType
 } from '$lib/api';
 import type { KnowledgeMapData, SectorMapData } from '$lib/types/scanning';
 import { getGalaxyFromCache } from '$lib/galaxyCache';
@@ -72,11 +74,16 @@ interface PlayerState {
 	currentTradingHubUuid: string | null;
 	isLoading: boolean;
 	isTraveling: boolean;
+	travelMode: 'gate' | 'direct_jump' | 'coordinate' | null;
 	travelDestination: string | null;
 	travelStatus: string | null;
 	knowledgeMap: KnowledgeMapData | null;
 	knowledgeMapStale: boolean;
 	sectorMap: SectorMapData | null;
+	lastPirateEncounter: unknown;
+	hubMarketEvents: MarketEvent[];
+	galaxyMarketEvents: MarketEvent[];
+	isLoadingMarketEvents: boolean;
 	needsCreation: boolean;
 	error: string | null;
 }
@@ -106,11 +113,16 @@ function createPlayerState() {
 		currentTradingHubUuid: null,
 		isLoading: false,
 		isTraveling: false,
+		travelMode: null,
 		travelDestination: null,
 		travelStatus: null,
 		knowledgeMap: null,
 		knowledgeMapStale: false,
 		sectorMap: null,
+		hubMarketEvents: [],
+		galaxyMarketEvents: [],
+		isLoadingMarketEvents: false,
+		lastPirateEncounter: null,
 		needsCreation: false,
 		error: null
 	});
@@ -230,28 +242,35 @@ function createPlayerState() {
 		return null;
 	}
 
-	// Purchase a ship
-	async function purchaseShip(shipUuid: string, shipName?: string) {
+	// Purchase a ship from a shipyard
+	async function purchaseShip(
+		shipUuid: string,
+		tradingHubUuid: string,
+		tradeInCurrentShip = false
+	) {
 		if (!state.playerUuid) return null;
 
 		try {
 			const response = await api.players.purchaseShip(state.playerUuid, {
 				ship_uuid: shipUuid,
-				ship_name: shipName
+				trading_hub_uuid: tradingHubUuid,
+				trade_in_current_ship: tradeInCurrentShip
 			});
 
 			if (response.success && response.data) {
-				state.credits = response.data.credits_remaining;
-				// Add to ships list
+				state.credits = response.data.remaining_credits;
+				// Add new ship to list
 				state.ships = [
 					...state.ships,
 					{
-						uuid: response.data.purchased_ship.uuid,
-						name: response.data.purchased_ship.name,
-						class: response.data.purchased_ship.class,
-						isActive: response.data.purchased_ship.is_active ?? false
+						uuid: response.data.ship.uuid,
+						name: response.data.ship.name,
+						class: response.data.ship.class,
+						isActive: false
 					}
 				];
+				// Refresh ship data
+				await loadMyShip();
 				return response.data;
 			} else {
 				console.error('[PlayerState] Failed to purchase ship:', response.error);
@@ -291,6 +310,35 @@ function createPlayerState() {
 			}
 		} catch (err) {
 			console.error('[PlayerState] Error switching ship:', err);
+			return null;
+		}
+	}
+
+	// Rename a ship
+	async function renameShip(shipUuid: string, newName: string) {
+		try {
+			const response = await api.players.renameShip(shipUuid, newName);
+
+			if (response.success && response.data) {
+				const { ship, credits_remaining } = response.data;
+				// Update name everywhere it appears
+				if (state.activeShip?.uuid === ship.uuid) {
+					state.activeShip = { ...state.activeShip, name: ship.name };
+				}
+				if (state.ship) {
+					state.ship = { ...state.ship, name: ship.name };
+				}
+				state.ships = state.ships.map((s) =>
+					s.uuid === ship.uuid ? { ...s, name: ship.name } : s
+				);
+				state.credits = credits_remaining;
+				return response.data;
+			} else {
+				console.error('[PlayerState] Failed to rename ship:', response.error);
+				return null;
+			}
+		} catch (err) {
+			console.error('[PlayerState] Error renaming ship:', err);
 			return null;
 		}
 	}
@@ -385,9 +433,9 @@ function createPlayerState() {
 			const response = await api.players.getCargo(state.playerUuid);
 
 			if (response.success && response.data) {
-				state.cargo = response.data.items;
-				state.cargoCapacity = response.data.cargo_hold;
-				state.cargoUsed = response.data.current_cargo;
+				state.cargo = response.data.cargo ?? [];
+				state.cargoCapacity = response.data.cargo_capacity ?? 0;
+				state.cargoUsed = response.data.current_cargo ?? 0;
 				console.log('[PlayerState] Cargo loaded:', state.cargo.length, 'items');
 				return response.data;
 			} else {
@@ -425,18 +473,19 @@ function createPlayerState() {
 	// Buy minerals from a trading hub
 	async function buyMineral(hubUuid: string, mineralUuid: string, quantity: number) {
 		if (!state.playerUuid) return null;
+		if (!state.activeShip?.uuid) throw new Error('No active ship');
 
 		try {
 			const response = await api.tradingHubs.buy(hubUuid, {
 				player_uuid: state.playerUuid,
+				ship_uuid: state.activeShip.uuid,
 				mineral_uuid: mineralUuid,
 				quantity
 			});
 
 			if (response.success && response.data) {
-				// Update credits
-				state.credits = response.data.remaining_credits;
-				state.cargoUsed = response.data.cargo_used;
+				state.credits = response.data.credits_remaining;
+				// TODO(human): Handle the new xp_earned field from the response
 				// Reload cargo to get updated manifest
 				await loadCargo();
 				// Reload hub inventory to get updated quantities
@@ -456,17 +505,19 @@ function createPlayerState() {
 	// Sell minerals to a trading hub
 	async function sellMineral(hubUuid: string, mineralUuid: string, quantity: number) {
 		if (!state.playerUuid) return null;
+		if (!state.activeShip?.uuid) throw new Error('No active ship');
 
 		try {
 			const response = await api.tradingHubs.sell(hubUuid, {
 				player_uuid: state.playerUuid,
+				ship_uuid: state.activeShip.uuid,
 				mineral_uuid: mineralUuid,
 				quantity
 			});
 
 			if (response.success && response.data) {
-				// Update credits
-				state.credits = response.data.new_credits;
+				state.credits = response.data.credits_remaining;
+				// TODO(human): Handle the new xp_earned field from the response
 				// Reload cargo to get updated manifest
 				await loadCargo();
 				// Reload hub inventory to get updated quantities
@@ -485,6 +536,7 @@ function createPlayerState() {
 
 	// Get cargo item by mineral UUID
 	function getCargoItem(mineralUuid: string): CargoItem | undefined {
+		if (!Array.isArray(state.cargo)) return undefined;
 		return state.cargo.find((item) => item.mineral.uuid === mineralUuid);
 	}
 
@@ -541,8 +593,8 @@ function createPlayerState() {
 					state.galaxyName = playerData.galaxy.name;
 				}
 
-				// Load ship data using the my-ship endpoint
-				await loadMyShip();
+				// Load ship data and cargo
+				await Promise.all([loadMyShip(), loadCargo()]);
 			} else {
 				// Check if the error indicates no player in galaxy
 				const errorCode = response.error?.code;
@@ -746,160 +798,147 @@ function createPlayerState() {
 		state.knowledgeMapStale = true;
 	}
 
-	// Travel to a destination (warp gate or star system)
-	async function travel(destinationUuid: string, destinationName?: string): Promise<TravelResponse | null> {
+	// Load market events for a specific trading hub
+	async function loadHubMarketEvents(hubUuid: string): Promise<MarketEvent[]> {
+		try {
+			const response = await api.tradingHubs.getActiveEvents(hubUuid);
+			if (response.success && response.data) {
+				state.hubMarketEvents = response.data.events ?? [];
+				return state.hubMarketEvents;
+			}
+		} catch (err) {
+			console.error('[PlayerState] Error loading hub market events:', err);
+		}
+		state.hubMarketEvents = [];
+		return [];
+	}
+
+	// Load galaxy-wide market events with optional filters
+	async function loadGalaxyMarketEvents(
+		filters?: { event_type?: MarketEventType; mineral?: string }
+	): Promise<MarketEvent[]> {
+		if (!state.galaxyUuid) return [];
+		state.isLoadingMarketEvents = true;
+		try {
+			const response = await api.marketEvents.getGalaxyEvents(state.galaxyUuid, filters);
+			if (response.success && response.data) {
+				state.galaxyMarketEvents = response.data.events ?? [];
+				return state.galaxyMarketEvents;
+			}
+		} catch (err) {
+			console.error('[PlayerState] Error loading galaxy market events:', err);
+		} finally {
+			state.isLoadingMarketEvents = false;
+		}
+		state.galaxyMarketEvents = [];
+		return [];
+	}
+
+	// Shared post-travel handler: refreshes ship/location state from server
+	async function _handleTravelResponse(
+		data: TravelResponse,
+		startTime: number
+	): Promise<TravelResponse> {
+		const minDisplayTime = 2000;
+
+		// Handle "generating" status — defensive, BE may still return this
+		if (data.status === 'generating' || data.message === 'generating') {
+			console.log('[PlayerState] System is generating, polling for completion...');
+			state.travelStatus = 'Generating star system...';
+
+			const maxPolls = 60;
+			const pollInterval = 2000;
+
+			for (let i = 0; i < maxPolls; i++) {
+				await new Promise((resolve) => setTimeout(resolve, pollInterval));
+				const dots = '.'.repeat((i % 3) + 1);
+				state.travelStatus = `Generating star system${dots}`;
+
+				try {
+					const systemResponse = await api.players.getCurrentSystem(state.playerUuid!);
+					if (systemResponse.success && systemResponse.data) {
+						const systemData = systemResponse.data as {
+							status?: string;
+							message?: string;
+						};
+						if (
+							systemData.status !== 'generating' &&
+							systemData.message !== 'generating'
+						) {
+							console.log('[PlayerState] System generation complete');
+							break;
+						}
+					}
+				} catch (pollErr) {
+					console.log('[PlayerState] Poll attempt', i + 1, 'failed:', pollErr);
+				}
+			}
+		}
+
+		state.travelStatus = 'Arriving at destination...';
+
+		// Update current system from BE response
+		if (data.new_location) {
+			state.currentSystem = {
+				uuid: data.new_location.uuid,
+				name: data.new_location.name,
+				type: data.new_location.type,
+				position: { x: 0, y: 0 } // Position refreshed by loadLocationDetails
+			};
+		}
+
+		// Track level-up
+		if (data.level_up) {
+			state.level = data.new_level;
+		}
+
+		// Store pirate encounter for UI alert (cleared on next travel)
+		state.lastPirateEncounter = data.pirate_encounter ?? null;
+
+		// Clear caches — new location needs fresh data
+		state.locationDetails = null;
+		state.facilities = null;
+		state.hubMarketEvents = [];
+		invalidateKnowledgeMap();
+
+		// Refresh ship (fuel was consumed) and location details from server
+		await loadMyShip();
+
+		// Ensure minimum display time for the warp animation
+		const elapsed = Date.now() - startTime;
+		if (elapsed < minDisplayTime) {
+			await new Promise((resolve) => setTimeout(resolve, minDisplayTime - elapsed));
+		}
+
+		return data;
+	}
+
+	// Travel via warp gate
+	async function travelViaGate(
+		gateUuid: string,
+		destinationName?: string
+	): Promise<TravelResponse | null> {
 		if (!state.playerUuid) {
-			console.log('[PlayerState] travel: No player UUID');
+			console.log('[PlayerState] travelViaGate: No player UUID');
 			return null;
 		}
 
 		state.isTraveling = true;
-		state.travelDestination = destinationName ?? destinationUuid;
+		state.travelMode = 'gate';
+		state.travelDestination = destinationName ?? gateUuid;
 		state.travelStatus = 'Initiating warp drive...';
 		state.error = null;
-
-		// Minimum display time for the warp animation (for visual effect)
-		const minDisplayTime = 2000;
+		state.lastPirateEncounter = null;
 		const startTime = Date.now();
 
 		try {
-			console.log('[PlayerState] Traveling to:', destinationUuid);
+			console.log('[PlayerState] Traveling via gate:', gateUuid);
 			state.travelStatus = 'Calculating jump coordinates...';
 
-			const response = await api.players.travel(state.playerUuid, destinationUuid);
+			const response = await api.players.travelViaWarpGate(state.playerUuid, gateUuid);
 
-			// Check if the system is still generating
 			if (response.success && response.data) {
-				const data = response.data;
-
-				// Handle "generating" status - poll until complete
-				if (data.status === 'generating' || data.message === 'generating') {
-					console.log('[PlayerState] System is generating, polling for completion...');
-					state.travelStatus = 'Generating star system...';
-
-					// Poll for system generation completion
-					const maxPolls = 60; // Max 60 attempts (about 2 minutes with 2s intervals)
-					const pollInterval = 2000; // 2 seconds between polls
-
-					for (let i = 0; i < maxPolls; i++) {
-						await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-						// Update status message with progress indication
-						const dots = '.'.repeat((i % 3) + 1);
-						state.travelStatus = `Generating star system${dots}`;
-
-						// Try to get the current system data
-						try {
-							const systemResponse = await api.players.getCurrentSystem(state.playerUuid!);
-
-							if (systemResponse.success && systemResponse.data) {
-								// Check if it's no longer generating
-								const systemData = systemResponse.data as { status?: string; message?: string };
-								if (systemData.status !== 'generating' && systemData.message !== 'generating') {
-									console.log('[PlayerState] System generation complete');
-									state.travelStatus = 'Arriving at destination...';
-
-									// Update state with the new system data
-									state.currentSystem = {
-										uuid: systemResponse.data.uuid,
-										name: systemResponse.data.name,
-										type: systemResponse.data.type,
-										position: systemResponse.data.position
-									};
-
-									if (systemResponse.data.sector) {
-										state.currentSector = {
-											uuid: systemResponse.data.sector.uuid,
-											name: systemResponse.data.sector.name,
-											display_name: systemResponse.data.sector.display_name,
-											grid: systemResponse.data.sector.grid,
-											danger_level: systemResponse.data.sector.danger_level
-										};
-									}
-
-									// Update fuel if available in original response
-									if (state.ship && data.fuel_remaining !== undefined) {
-										state.ship = {
-											...state.ship,
-											fuel: {
-												...state.ship.fuel,
-												current: data.fuel_remaining
-											}
-										};
-									}
-
-									state.locationDetails = null;
-								state.facilities = null;
-								invalidateKnowledgeMap();
-
-									// Ensure minimum display time
-									const elapsed = Date.now() - startTime;
-									if (elapsed < minDisplayTime) {
-										await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsed));
-									}
-
-									return data;
-								}
-							}
-						} catch (pollErr) {
-							console.log('[PlayerState] Poll attempt', i + 1, 'failed:', pollErr);
-							// Continue polling
-						}
-					}
-
-					// If we've exhausted polls, return what we have
-					console.warn('[PlayerState] System generation polling timed out');
-					state.travelStatus = 'System generation taking longer than expected...';
-				}
-
-				// Normal travel completion (not generating)
-				console.log('[PlayerState] Travel successful:', data);
-				state.travelStatus = 'Arriving at destination...';
-
-				// Update current system
-				if (data.destination) {
-					state.currentSystem = {
-						uuid: data.destination.uuid,
-						name: data.destination.name,
-						type: data.destination.type,
-						position: data.destination.position
-					};
-				}
-
-				// Update current sector
-				if (data.sector) {
-					state.currentSector = {
-						uuid: data.sector.uuid,
-						name: data.sector.name,
-						display_name: data.sector.display_name,
-						grid: data.sector.grid,
-						danger_level: data.sector.danger_level
-					};
-				}
-
-				// Update fuel in ship stats
-				if (state.ship && data.fuel_remaining !== undefined) {
-					state.ship = {
-						...state.ship,
-						fuel: {
-							...state.ship.fuel,
-							current: data.fuel_remaining
-						}
-					};
-				}
-
-				// Clear location details and facilities - will need to reload for new location
-				state.locationDetails = null;
-				state.facilities = null;
-				invalidateKnowledgeMap();
-
-				// Ensure minimum display time for the warp animation
-				const elapsed = Date.now() - startTime;
-				if (elapsed < minDisplayTime) {
-					await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsed));
-				}
-
-				return data;
+				return await _handleTravelResponse(response.data, startTime);
 			} else {
 				const errorMsg = response.error?.message || 'Travel failed';
 				console.error('[PlayerState] Travel failed:', response.error);
@@ -912,9 +951,117 @@ function createPlayerState() {
 			return null;
 		} finally {
 			state.isTraveling = false;
+			state.travelMode = null;
 			state.travelDestination = null;
 			state.travelStatus = null;
 		}
+	}
+
+	// Travel via coordinate jump
+	async function jumpToCoordinates(
+		targetX: number,
+		targetY: number,
+		destinationName?: string
+	): Promise<TravelResponse | null> {
+		if (!state.playerUuid) {
+			console.log('[PlayerState] jumpToCoordinates: No player UUID');
+			return null;
+		}
+
+		state.isTraveling = true;
+		state.travelMode = 'coordinate';
+		state.travelDestination = destinationName ?? `(${targetX}, ${targetY})`;
+		state.travelStatus = 'Initiating warp drive...';
+		state.error = null;
+		state.lastPirateEncounter = null;
+		const startTime = Date.now();
+
+		try {
+			console.log('[PlayerState] Jumping to coordinates:', targetX, targetY);
+			state.travelStatus = 'Plotting coordinate jump...';
+
+			const response = await api.players.jumpToCoordinates(
+				state.playerUuid,
+				targetX,
+				targetY
+			);
+
+			if (response.success && response.data) {
+				return await _handleTravelResponse(response.data, startTime);
+			} else {
+				const errorMsg = response.error?.message || 'Coordinate jump failed';
+				console.error('[PlayerState] Coordinate jump failed:', response.error);
+				state.error = errorMsg;
+				return null;
+			}
+		} catch (err) {
+			console.error('[PlayerState] Coordinate jump error:', err);
+			state.error = err instanceof Error ? err.message : 'Coordinate jump failed';
+			return null;
+		} finally {
+			state.isTraveling = false;
+			state.travelMode = null;
+			state.travelDestination = null;
+			state.travelStatus = null;
+		}
+	}
+
+	// Direct jump to a known hub/POI
+	async function directJumpToHub(
+		targetPoiUuid: string,
+		destinationName?: string
+	): Promise<TravelResponse | null> {
+		if (!state.playerUuid) {
+			console.log('[PlayerState] directJumpToHub: No player UUID');
+			return null;
+		}
+
+		state.isTraveling = true;
+		state.travelMode = 'direct_jump';
+		state.travelDestination = destinationName ?? targetPoiUuid;
+		state.travelStatus = 'Initiating warp drive...';
+		state.error = null;
+		state.lastPirateEncounter = null;
+		const startTime = Date.now();
+
+		try {
+			console.log('[PlayerState] Direct jumping to:', targetPoiUuid);
+			state.travelStatus = 'Engaging direct jump drive...';
+
+			const response = await api.players.directJumpToHub(
+				state.playerUuid,
+				targetPoiUuid
+			);
+
+			if (response.success && response.data) {
+				return await _handleTravelResponse(response.data, startTime);
+			} else {
+				const errorMsg = response.error?.message || 'Direct jump failed';
+				console.error('[PlayerState] Direct jump failed:', response.error);
+				state.error = errorMsg;
+				return null;
+			}
+		} catch (err) {
+			console.error('[PlayerState] Direct jump error:', err);
+			state.error = err instanceof Error ? err.message : 'Direct jump failed';
+			return null;
+		} finally {
+			state.isTraveling = false;
+			state.travelMode = null;
+			state.travelDestination = null;
+			state.travelStatus = null;
+		}
+	}
+
+	/** @deprecated Use travelViaGate, jumpToCoordinates, or directJumpToHub instead */
+	async function travel(
+		destinationUuid: string,
+		destinationName?: string
+	): Promise<TravelResponse | null> {
+		console.warn(
+			'[PlayerState] travel() is deprecated. Use travelViaGate(), jumpToCoordinates(), or directJumpToHub() instead.'
+		);
+		return travelViaGate(destinationUuid, destinationName);
 	}
 
 	function reset() {
@@ -946,6 +1093,10 @@ function createPlayerState() {
 		state.knowledgeMap = null;
 		state.knowledgeMapStale = false;
 		state.sectorMap = null;
+		state.hubMarketEvents = [];
+		state.galaxyMarketEvents = [];
+		state.isLoadingMarketEvents = false;
+		state.lastPirateEncounter = null;
 		state.needsCreation = false;
 		state.error = null;
 	}
@@ -1020,6 +1171,9 @@ function createPlayerState() {
 		get isTraveling() {
 			return state.isTraveling;
 		},
+		get travelMode() {
+			return state.travelMode;
+		},
 		get travelDestination() {
 			return state.travelDestination;
 		},
@@ -1034,6 +1188,18 @@ function createPlayerState() {
 		},
 		get sectorMap() {
 			return state.sectorMap;
+		},
+		get hubMarketEvents() {
+			return state.hubMarketEvents;
+		},
+		get galaxyMarketEvents() {
+			return state.galaxyMarketEvents;
+		},
+		get isLoadingMarketEvents() {
+			return state.isLoadingMarketEvents;
+		},
+		get lastPirateEncounter() {
+			return state.lastPirateEncounter;
 		},
 		get needsCreation() {
 			return state.needsCreation;
@@ -1051,6 +1217,7 @@ function createPlayerState() {
 		getScanLevel,
 		purchaseShip,
 		switchShip,
+		renameShip,
 		loadShips,
 		loadMyShip,
 		loadCargo,
@@ -1060,9 +1227,14 @@ function createPlayerState() {
 		getCargoItem,
 		getAvailableCargoSpace,
 		travel,
+		travelViaGate,
+		jumpToCoordinates,
+		directJumpToHub,
 		loadKnowledgeMap,
 		loadSectorMap,
 		invalidateKnowledgeMap,
+		loadHubMarketEvents,
+		loadGalaxyMarketEvents,
 		reset
 	};
 }

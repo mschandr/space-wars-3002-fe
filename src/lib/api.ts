@@ -369,6 +369,7 @@ export interface LocationGate {
 	destination_uuid: string;
 	destination_name: string;
 	distance: number;
+	fuel_cost?: number;
 }
 
 export interface CurrentLocationResponse {
@@ -425,12 +426,58 @@ export interface ShipTemplate {
 	description: string;
 }
 
-export interface ShipyardResponse {
-	shipyard: {
+// Ship class info (role, strengths, weaknesses)
+export interface ShipClassInfo {
+	label: string;
+	role: string;
+	description: string;
+	strengths: string[];
+	weaknesses: string[];
+}
+
+// Ship stats block
+export interface ShipStatsBlock {
+	hull_strength: number;
+	shield_strength: number;
+	cargo_capacity: number;
+	speed: number;
+	weapon_slots: number;
+	utility_slots: number;
+}
+
+// Ship special feature
+export interface ShipSpecialFeature {
+	name: string;
+	value: string | number | boolean;
+	description: string;
+}
+
+// Individual item in the shipyard listing
+export interface ShipyardItem {
+	ship: {
 		uuid: string;
 		name: string;
+		class: string;
+		class_info?: ShipClassInfo;
+		description?: string;
+		base_price?: string;
+		rarity?: string;
+		requirements?: { level: number };
+		is_available?: boolean;
+		stats?: ShipStatsBlock;
+		components?: { weapons: number; sensors: number; warp_drive: number };
+		fuel?: { max_fuel: number; regen_rate: number; consumption_rate: number };
+		special_features?: ShipSpecialFeature[];
 	};
-	available_ships: ShipTemplate[];
+	current_price: number;
+	quantity: number;
+	owner_commentary?: string;
+}
+
+export interface ShipyardResponse {
+	has_shipyard: boolean;
+	trading_hub_name: string;
+	available_ships: ShipyardItem[];
 }
 
 // Ship types
@@ -467,13 +514,20 @@ export interface MyShipResponse {
 
 export interface PurchaseShipRequest {
 	ship_uuid: string;
-	ship_name?: string;
+	trading_hub_uuid: string;
+	trade_in_current_ship?: boolean;
 }
 
 export interface PurchaseShipResponse {
-	purchased_ship: Ship;
-	price_paid: number;
-	credits_remaining: number;
+	ship: {
+		uuid: string;
+		name: string;
+		class: string;
+	};
+	cost_paid: number;
+	trade_in_value?: number;
+	net_cost?: number;
+	remaining_credits: number;
 }
 
 export interface SwitchShipRequest {
@@ -483,6 +537,12 @@ export interface SwitchShipRequest {
 export interface SwitchShipResponse {
 	active_ship: Ship;
 	previous_ship: Ship;
+}
+
+export interface RenameShipResponse {
+	ship: { uuid: string; name: string };
+	rename_fee: number;
+	credits_remaining: number;
 }
 
 // Player Location Response
@@ -783,25 +843,111 @@ export interface StarSystemListResponse {
 
 // Travel types
 export interface TravelResponse {
-	success: boolean;
-	status?: 'complete' | 'generating';
-	message?: string;
-	destination: {
+	fuel_consumed: number;
+	xp_earned: number;
+	new_location: {
 		uuid: string;
 		name: string;
 		type: string;
-		position: { x: number; y: number };
+		x: number;
+		y: number;
+		is_inhabited: boolean;
+		description?: string;
+		attributes?: Record<string, unknown>;
 	};
-	sector: {
+	level_up: boolean;
+	new_level: number;
+	pirate_encounter?: unknown; // TODO: type when combat is implemented
+	// Defensive: BE may still return these during system generation
+	status?: 'complete' | 'generating';
+	message?: string;
+}
+
+export interface WarpGateListResponse {
+	location: {
 		uuid: string;
 		name: string;
-		display_name?: string;
-		grid: { x: number; y: number };
-		danger_level: 'low' | 'medium' | 'high' | 'extreme';
+		x: number;
+		y: number;
+		is_inhabited: boolean;
+		description?: string;
+		attributes?: Record<string, unknown>;
 	};
-	fuel_used: number;
-	fuel_remaining: number;
-	travel_time?: number;
+	gate_count: number;
+	gates: {
+		uuid: string;
+		destination: { uuid: string; name: string; type: string; x: number; y: number };
+		fuel_cost: number;
+		distance: number;
+	}[];
+}
+
+export interface FuelCostResponse {
+	from: { uuid: string; name: string; x: number; y: number };
+	to: { uuid: string; name: string; x: number; y: number };
+	distance: number;
+	ship: { current_fuel: number; max_fuel: number; warp_drive: number };
+	warp_gate: {
+		gate_uuid: string;
+		distance: number;
+		fuel_cost: number;
+		can_afford: boolean;
+	} | null;
+	direct_jump: {
+		distance: number;
+		fuel_cost: number;
+		can_afford: boolean;
+		in_range: boolean;
+		max_range: number;
+	};
+	cheapest_option: 'warp_gate' | 'direct_jump' | null;
+	cheapest_fuel_cost: number | null;
+	can_reach: boolean;
+}
+
+export interface NearbySystem {
+	uuid: string;
+	name: string;
+	type: string;
+	distance: number;
+	x: number | null;
+	y: number | null;
+	is_inhabited: boolean;
+	has_chart: boolean;
+	travel: {
+		warp_gate: {
+			gate_uuid: string;
+			fuel_cost: number;
+			can_afford: boolean;
+		} | null;
+		direct_jump: {
+			fuel_cost: number;
+			in_range: boolean;
+			can_afford: boolean;
+		};
+		cheapest_option: 'warp_gate' | 'direct_jump' | null;
+		cheapest_fuel_cost: number | null;
+		can_reach: boolean;
+	};
+}
+
+export interface NearbySystemsResponse {
+	current_location: { uuid: string; name: string; x: number; y: number };
+	sensor_range: number;
+	sensor_level: number;
+	ship: {
+		current_fuel: number;
+		max_fuel: number;
+		warp_drive: number;
+		max_jump_range: number;
+	};
+	systems_detected: number;
+	nearby_systems: NearbySystem[];
+}
+
+export interface XpPreviewResponse {
+	distance: number;
+	xp_earned: number;
 }
 
 // System generation status response
@@ -863,6 +1009,51 @@ export interface FacilitiesResponse {
 	};
 }
 
+// Salvage Yard types
+export interface SalvageComponent {
+	id: number;
+	uuid?: string;
+	name: string;
+	type: string;
+	slot_type: string;
+	slot_type_label?: string;
+	description?: string;
+	slots_required?: number;
+	rarity?: string;
+	rarity_label?: string;
+	rarity_color?: string;
+	effects?: Record<string, number>;
+	requirements?: unknown;
+}
+
+export interface SalvageInventoryItem {
+	id: number;
+	component: SalvageComponent;
+	quantity: number;
+	price: number;
+	condition: number;
+	condition_description: string;
+	source: string;
+	source_description: string;
+	is_new?: boolean;
+	owner_commentary?: string;
+}
+
+export interface SalvageYardResponse {
+	hub: {
+		uuid?: string;
+		id?: number;
+		name: string;
+		tier: string;
+	};
+	inventory: Record<string, SalvageInventoryItem[]>;
+}
+
+export interface SalvagePurchaseResponse {
+	component_id: number;
+	credits_remaining: number;
+}
+
 export interface BarVisitResponse {
 	bar: {
 		uuid: string;
@@ -900,6 +1091,7 @@ export interface ShipCatalogItem {
 
 // Mineral types
 export interface Mineral {
+	id: number;
 	uuid: string;
 	name: string;
 	description?: string;
@@ -940,33 +1132,66 @@ export interface NearbyHubsResponse {
 
 export interface BuyMineralRequest {
 	player_uuid: string;
+	ship_uuid: string;
 	mineral_uuid: string;
 	quantity: number;
 }
 
 export interface BuyMineralResponse {
-	mineral: string;
-	quantity_bought: number;
+	transaction_type: string;
+	mineral: Mineral;
+	quantity: number;
 	price_per_unit: number;
 	total_cost: number;
-	remaining_credits: number;
-	cargo_used: number;
+	credits_remaining: number;
 	cargo_remaining: number;
+	xp_earned: number;
 }
 
 export interface SellMineralRequest {
 	player_uuid: string;
+	ship_uuid: string;
 	mineral_uuid: string;
 	quantity: number;
 }
 
 export interface SellMineralResponse {
-	mineral: string;
-	quantity_sold: number;
+	transaction_type: string;
+	mineral: Mineral;
+	quantity: number;
 	price_per_unit: number;
-	total_earned: number;
-	new_credits: number;
-	cargo_freed: number;
+	total_revenue: number;
+	credits_remaining: number;
+	cargo_remaining: number;
+	xp_earned: number;
+}
+
+// Market event types
+export type MarketEventType = 'shortage' | 'surplus' | 'boom' | 'bust';
+
+export interface MarketEvent {
+	uuid: string;
+	event_type: MarketEventType;
+	mineral: { name: string; symbol: string; base_price?: number; uuid?: string };
+	price_multiplier: number;
+	modified_price?: number;
+	price_change_percent?: number;
+	description: string;
+	trading_hub?: { uuid: string; name: string; location: { x: number; y: number } };
+	expires_at: string;
+	time_remaining_seconds: number | null;
+}
+
+export interface HubActiveEventsResponse {
+	trading_hub: { uuid: string; name: string; location: { x: number; y: number } };
+	active_events_count: number;
+	events: MarketEvent[];
+}
+
+export interface GalaxyMarketEventsResponse {
+	galaxy: { uuid: string; name: string };
+	total_active_events: number;
+	events: MarketEvent[];
 }
 
 // Cargo types
@@ -980,10 +1205,12 @@ export interface CargoItem {
 }
 
 export interface CargoResponse {
-	cargo_hold: number;
+	ship_uuid: string;
+	ship_name: string;
 	current_cargo: number;
+	cargo_capacity: number;
 	available_space: number;
-	items: CargoItem[];
+	cargo: CargoItem[];
 }
 
 // Sector types
@@ -1387,6 +1614,13 @@ export const api = {
 			return request<Ship[]>(`/players/${playerUuid}/ships`);
 		},
 
+		async renameShip(shipUuid: string, name: string) {
+			return request<RenameShipResponse>(`/ships/${shipUuid}/name`, {
+				method: 'PATCH',
+				body: JSON.stringify({ name })
+			});
+		},
+
 		// Get player's current location with details
 		async getLocation(playerUuid: string) {
 			return request<PlayerLocationResponse>(`/players/${playerUuid}/location`);
@@ -1428,11 +1662,27 @@ export const api = {
 			return request<StarSystemDetails>(`/players/${playerUuid}/current-system`);
 		},
 
-		// Travel to a destination (warp gate or star system)
-		async travel(playerUuid: string, destinationUuid: string) {
-			return request<TravelResponse>(`/players/${playerUuid}/travel`, {
+		// Travel via warp gate
+		async travelViaWarpGate(playerUuid: string, gateUuid: string) {
+			return request<TravelResponse>(`/players/${playerUuid}/travel/warp-gate`, {
 				method: 'POST',
-				body: JSON.stringify({ destination_uuid: destinationUuid })
+				body: JSON.stringify({ gate_uuid: gateUuid })
+			});
+		},
+
+		// Travel via coordinate jump
+		async jumpToCoordinates(playerUuid: string, targetX: number, targetY: number) {
+			return request<TravelResponse>(`/players/${playerUuid}/travel/coordinate`, {
+				method: 'POST',
+				body: JSON.stringify({ target_x: targetX, target_y: targetY })
+			});
+		},
+
+		// Direct jump to a known hub/POI
+		async directJumpToHub(playerUuid: string, targetPoiUuid: string) {
+			return request<TravelResponse>(`/players/${playerUuid}/travel/direct-jump`, {
+				method: 'POST',
+				body: JSON.stringify({ target_poi_uuid: targetPoiUuid })
 			});
 		},
 
@@ -1448,6 +1698,10 @@ export const api = {
 		async getKnowledgeMap(playerUuid: string, sectorUuid?: string) {
 			const params = sectorUuid ? `?sector_uuid=${sectorUuid}` : '';
 			return request<KnowledgeMapData>(`/players/${playerUuid}/knowledge-map${params}`);
+		},
+
+		async getNearbySystems(playerUuid: string) {
+			return request<NearbySystemsResponse>(`/players/${playerUuid}/nearby-systems`);
 		}
 	},
 
@@ -1455,6 +1709,20 @@ export const api = {
 	ships: {
 		async getCatalog() {
 			return request<ShipCatalogItem[]>('/ships/catalog');
+		}
+	},
+
+	// Salvage Yard endpoints
+	salvageYard: {
+		async getInventory(playerUuid: string) {
+			return request<SalvageYardResponse>(`/players/${playerUuid}/salvage-yard`);
+		},
+
+		async purchase(playerUuid: string, inventoryId: number, slotIndex: number) {
+			return request<SalvagePurchaseResponse>(`/players/${playerUuid}/salvage-yard/purchase`, {
+				method: 'POST',
+				body: JSON.stringify({ inventory_id: inventoryId, slot_index: slotIndex })
+			});
 		}
 	},
 
@@ -1474,7 +1742,7 @@ export const api = {
 		},
 
 		async getShipyard(hubUuid: string) {
-			return request<ShipyardResponse>(`/trading-hubs/${hubUuid}/shipyard`);
+			return request<ShipyardResponse>(`/trading-hubs/${hubUuid}/ship-shop`);
 		},
 
 		async list(playerUuid: string, radius?: number) {
@@ -1501,6 +1769,30 @@ export const api = {
 				method: 'POST',
 				body: JSON.stringify(data)
 			});
+		},
+
+		async getActiveEvents(hubUuid: string) {
+			return request<HubActiveEventsResponse>(`/trading-hubs/${hubUuid}/active-events`);
+		}
+	},
+
+	// Market events endpoints
+	marketEvents: {
+		async getGalaxyEvents(
+			galaxyUuid: string,
+			filters?: { event_type?: MarketEventType; mineral?: string }
+		) {
+			const params = new URLSearchParams();
+			if (filters?.event_type) params.set('event_type', filters.event_type);
+			if (filters?.mineral) params.set('mineral', filters.mineral);
+			const qs = params.toString();
+			return request<GalaxyMarketEventsResponse>(
+				`/galaxies/${galaxyUuid}/market-events${qs ? `?${qs}` : ''}`
+			);
+		},
+
+		async getEvent(eventUuid: string) {
+			return request<MarketEvent>(`/market-events/${eventUuid}`);
 		}
 	},
 
@@ -1515,6 +1807,33 @@ export const api = {
 	sectors: {
 		async get(sectorUuid: string) {
 			return request<SectorDetailsResponse>(`/sectors/${sectorUuid}`);
+		}
+	},
+
+	// Travel utility endpoints
+	travel: {
+		async listWarpGates(locationUuid: string) {
+			return request<WarpGateListResponse>(`/warp-gates/${locationUuid}`);
+		},
+
+		async previewFuelCost(
+			shipUuid: string,
+			target: { poiUuid: string } | { x: number; y: number }
+		) {
+			const params = new URLSearchParams({ ship_uuid: shipUuid });
+			if ('poiUuid' in target) {
+				params.set('poi_uuid', target.poiUuid);
+			} else {
+				params.set('x', String(target.x));
+				params.set('y', String(target.y));
+			}
+			return request<FuelCostResponse>(`/travel/fuel-cost?${params}`);
+		},
+
+		async previewXP(distance: number, playerUuid: string) {
+			return request<XpPreviewResponse>(
+				`/travel/xp-preview?distance=${distance}&player_uuid=${playerUuid}`
+			);
 		}
 	}
 };

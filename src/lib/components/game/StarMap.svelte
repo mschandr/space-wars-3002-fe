@@ -95,6 +95,16 @@
 		return result;
 	}
 
+	// Build set of systems that have warp gates (appear in any known lane)
+	const systemsWithGates = $derived.by(() => {
+		const s = new Set<string>();
+		for (const lane of knownLanes) {
+			s.add(lane.from_uuid);
+			s.add(lane.to_uuid);
+		}
+		return s;
+	});
+
 	// Get risk level description
 	function getRiskLevel(sys: KnownSystem): { level: string; color: string } {
 		if (sys.knowledge_level < 3) {
@@ -132,7 +142,7 @@
 	// Lane highlight check
 	function isLaneHighlighted(lane: KnownLane): boolean {
 		if (!hoveredSystem) return false;
-		return lane.from_poi_uuid === hoveredSystem.uuid || lane.to_poi_uuid === hoveredSystem.uuid;
+		return lane.from_uuid === hoveredSystem.uuid || lane.to_uuid === hoveredSystem.uuid;
 	}
 
 	// Calculate viewBox to center on player position
@@ -276,19 +286,19 @@
 		{/each}
 
 		<!-- System nodes -->
-		{#each knownSystems as sys (sys.poi_uuid)}
+		{#each knownSystems as sys (sys.uuid)}
 			<SystemNode
-				uuid={sys.poi_uuid}
-				name={sys.knowledge_level >= 2 ? (sys.name ?? 'Unknown') : '???'}
+				uuid={sys.uuid}
+				name={sys.name ?? '???'}
 				x={sys.x}
 				y={sys.y}
 				scanLevel={sys.knowledge_level}
 				color={stellarColor(sys)}
-				hasWarpGate={false}
+				hasWarpGate={systemsWithGates.has(sys.uuid)}
 				isInhabited={sys.is_inhabited ?? false}
 				isHazardous={sys.pirate_warning ?? false}
-				isSelected={selectedSystem === sys.poi_uuid}
-				isPlayerLocation={playerPosition.systemUuid === sys.poi_uuid}
+				isSelected={selectedSystem === sys.uuid}
+				isPlayerLocation={playerPosition.systemUuid === sys.uuid}
 				showGates={filters.gates}
 				showInhabited={filters.inhabited}
 				showHazards={filters.hazards}
@@ -302,10 +312,10 @@
 
 	<!-- Selected system info overlay -->
 	{#if selectedSystem}
-		{@const selected = knownSystems.find((s) => s.poi_uuid === selectedSystem)}
+		{@const selected = knownSystems.find((s) => s.uuid === selectedSystem)}
 		{#if selected}
 			<div class="system-info-overlay">
-				<h4>{selected.knowledge_level >= 2 ? (selected.name ?? 'Unknown') : '???'}</h4>
+				<h4>{selected.name ?? '???'}</h4>
 				<p class="system-type">{selected.knowledge_label}</p>
 				{#if selected.stellar_class}
 					<p class="scan-level">{selected.stellar_class}{selected.stellar_description ? ' — ' + selected.stellar_description : ''}</p>
@@ -319,7 +329,7 @@
 
 	<!-- Hover Tooltip -->
 	{#if hoveredSystem}
-		{@const risk = getRiskLevel(knownSystems.find(s => s.poi_uuid === hoveredSystem?.uuid) ?? { knowledge_level: 0, pirate_warning: false } as KnownSystem)}
+		{@const risk = getRiskLevel(knownSystems.find(s => s.uuid === hoveredSystem?.uuid) ?? { knowledge_level: 0, pirate_warning: false } as KnownSystem)}
 		<div class="system-tooltip" style="left: {tooltipPosition.x}px; top: {tooltipPosition.y}px;">
 			<div class="tooltip-header">
 				<h4>{hoveredSystem.name}</h4>
