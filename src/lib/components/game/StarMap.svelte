@@ -1,13 +1,8 @@
 <script lang="ts">
 	import SystemNode from './SystemNode.svelte';
 	import MapLegend from './MapLegend.svelte';
-	import type { MapSystemData } from '$lib/types/scanning';
-
-	interface SystemService {
-		type: string;
-		name: string;
-		accessible: boolean;
-	}
+	import type { KnownSystem, KnownLane, DangerZone } from '$lib/types/scanning';
+	import { KNOWLEDGE_COLORS, stellarColor } from '$lib/types/scanning';
 
 	interface HoveredSystem {
 		uuid: string;
@@ -18,28 +13,34 @@
 		hasWarpGate: boolean;
 		isInhabited: boolean;
 		isHazardous: boolean;
-		services: SystemService[];
+		services: { type: string; name: string; accessible: boolean }[];
+		knowledgeLabel?: string;
+		freshness?: number;
 	}
 
 	interface Props {
-		systems: MapSystemData[];
+		knownSystems: KnownSystem[];
+		knownLanes?: KnownLane[];
+		dangerZones?: DangerZone[];
+		sensorRange?: number;
 		playerPosition: { x: number; y: number; systemUuid: string };
 		galaxyBounds: { width: number; height: number };
 		selectedSystem: string | null;
 		zoom: number;
 		filters: { gates: boolean; inhabited: boolean; hazards: boolean };
-		scanLevels: Record<string, number>;
 		onSystemClick: (uuid: string) => void;
 	}
 
 	let {
-		systems,
+		knownSystems,
+		knownLanes = [],
+		dangerZones = [],
+		sensorRange = 0,
 		playerPosition,
 		galaxyBounds,
 		selectedSystem,
 		zoom,
 		filters,
-		scanLevels,
 		onSystemClick
 	}: Props = $props();
 
@@ -80,64 +81,36 @@
 		hoveredSystem = null;
 	}
 
-	// Generate services based on scan level and system features
-	function getSystemServices(system: MapSystemData, scanLevel: number): SystemService[] {
-		const services: SystemService[] = [];
-
-		// Trading Hub - visible at scan level 1+
-		if (scanLevel >= 1) {
-			services.push({
-				type: 'trading',
-				name: 'Trading Hub',
-				accessible: system.is_inhabited && scanLevel >= 2
+	// Derive services from KnownSystem.services object (knowledge_level 3+)
+	function getSystemServices(sys: KnownSystem): { type: string; name: string; accessible: boolean }[] {
+		if (!sys.services || sys.knowledge_level < 3) return [];
+		const result: { type: string; name: string; accessible: boolean }[] = [];
+		for (const [key, available] of Object.entries(sys.services)) {
+			result.push({
+				type: key,
+				name: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+				accessible: available
 			});
 		}
-
-		// Warp Gate - visible at scan level 2+
-		if (system.has_warp_gate && scanLevel >= 2) {
-			services.push({
-				type: 'warp',
-				name: 'Warp Gate',
-				accessible: scanLevel >= 3
-			});
-		}
-
-		// Salvage Yard - visible at scan level 3+
-		if (scanLevel >= 3) {
-			services.push({
-				type: 'salvage',
-				name: 'Salvage Yard',
-				accessible: scanLevel >= 4
-			});
-		}
-
-		// Shipyard - visible at scan level 4+ and only in inhabited systems
-		if (system.is_inhabited && scanLevel >= 4) {
-			services.push({
-				type: 'shipyard',
-				name: 'Shipyard',
-				accessible: scanLevel >= 5
-			});
-		}
-
-		// Cartographer - visible at scan level 5+
-		if (scanLevel >= 5) {
-			services.push({
-				type: 'cartographer',
-				name: 'Cartographer',
-				accessible: scanLevel >= 6
-			});
-		}
-
-		return services;
+		return result;
 	}
 
+	// Build set of systems that have warp gates (appear in any known lane)
+	const systemsWithGates = $derived.by(() => {
+		const s = new Set<string>();
+		for (const lane of knownLanes) {
+			s.add(lane.from_uuid);
+			s.add(lane.to_uuid);
+		}
+		return s;
+	});
+
 	// Get risk level description
-	function getRiskLevel(isHazardous: boolean, scanLevel: number): { level: string; color: string } {
-		if (scanLevel < 4) {
+	function getRiskLevel(sys: KnownSystem): { level: string; color: string } {
+		if (sys.knowledge_level < 3) {
 			return { level: 'Unknown', color: '#718096' };
 		}
-		if (isHazardous) {
+		if (sys.pirate_warning) {
 			return { level: 'High Risk', color: '#ef4444' };
 		}
 		return { level: 'Low Risk', color: '#22c55e' };
@@ -145,8 +118,11 @@
 
 	// Service icons
 	const SERVICE_ICONS: Record<string, string> = {
+		trading_hub: '\u{1F4B0}',
 		trading: '\u{1F4B0}',
+		warp_gate: '\u{1F300}',
 		warp: '\u{1F300}',
+		salvage_yard: '\u{1F527}',
 		salvage: '\u{1F527}',
 		shipyard: '\u{1F680}',
 		cartographer: '\u{1F5FA}',
@@ -161,6 +137,12 @@
 
 	function getServiceIcon(type: string): string {
 		return SERVICE_ICONS[type] ?? SERVICE_ICONS.default;
+	}
+
+	// Lane highlight check
+	function isLaneHighlighted(lane: KnownLane): boolean {
+		if (!hoveredSystem) return false;
+		return lane.from_uuid === hoveredSystem.uuid || lane.to_uuid === hoveredSystem.uuid;
 	}
 
 	// Calculate viewBox to center on player position
@@ -200,11 +182,6 @@
 
 	function handleWheel(e: WheelEvent) {
 		e.preventDefault();
-		// Zoom handling is done via parent component
-	}
-
-	function getScanLevel(uuid: string): number {
-		return scanLevels[uuid] ?? 0;
 	}
 </script>
 
@@ -236,29 +213,98 @@
 					stroke-width="0.5"
 				/>
 			</pattern>
+			<filter id="line-glow" x="-50%" y="-50%" width="200%" height="200%">
+				<feGaussianBlur stdDeviation="2" result="blur" />
+				<feMerge>
+					<feMergeNode in="blur" />
+					<feMergeNode in="SourceGraphic" />
+				</feMerge>
+			</filter>
 		</defs>
 		<rect x="0" y="0" width={galaxyBounds.width} height={galaxyBounds.height} fill="url(#grid)" />
 
+		<!-- Danger zones (translucent red circles) -->
+		{#each dangerZones as zone}
+			<circle
+				cx={zone.center.x}
+				cy={zone.center.y}
+				r={zone.radius_ly}
+				fill="rgba(239, 68, 68, 0.08)"
+				stroke="#ef4444"
+				stroke-width="1"
+				stroke-dasharray="6,3"
+				stroke-opacity={zone.confidence * 0.6}
+				pointer-events="none"
+			/>
+		{/each}
+
+		<!-- Sensor range circle (blue dashed, centered on player) -->
+		{#if sensorRange > 0}
+			<circle
+				cx={playerPosition.x}
+				cy={playerPosition.y}
+				r={sensorRange}
+				fill="none"
+				stroke="#3b82f6"
+				stroke-width="1"
+				stroke-dasharray="8,4"
+				stroke-opacity="0.4"
+				pointer-events="none"
+			/>
+		{/if}
+
+		<!-- Warp lanes (background — non-highlighted) -->
+		{#each knownLanes as lane (lane.gate_uuid)}
+			{#if !isLaneHighlighted(lane)}
+				<line
+					x1={lane.from.x}
+					y1={lane.from.y}
+					x2={lane.to.x}
+					y2={lane.to.y}
+					stroke={lane.has_pirate ? '#dc2626' : '#374151'}
+					stroke-width={lane.has_pirate ? 1.5 : 1}
+					stroke-opacity={lane.has_pirate ? 0.6 : 0.5}
+					stroke-dasharray={lane.has_pirate ? '4,2' : 'none'}
+				/>
+			{/if}
+		{/each}
+
+		<!-- Warp lanes (highlighted — connected to hovered system) -->
+		{#each knownLanes as lane (lane.gate_uuid)}
+			{#if isLaneHighlighted(lane)}
+				<line
+					x1={lane.from.x}
+					y1={lane.from.y}
+					x2={lane.to.x}
+					y2={lane.to.y}
+					stroke={lane.has_pirate ? '#ef4444' : '#60a5fa'}
+					stroke-width="2"
+					filter="url(#line-glow)"
+					stroke-dasharray={lane.has_pirate ? '4,2' : 'none'}
+				/>
+			{/if}
+		{/each}
+
 		<!-- System nodes -->
-		{#each systems as system (system.uuid)}
-			{@const scanLevel = getScanLevel(system.uuid)}
+		{#each knownSystems as sys (sys.uuid)}
 			<SystemNode
-				uuid={system.uuid}
-				name={system.name}
-				x={system.position.x}
-				y={system.position.y}
-				{scanLevel}
-				hasWarpGate={system.has_warp_gate}
-				isInhabited={system.is_inhabited}
-				isHazardous={system.is_hazardous}
-				isSelected={selectedSystem === system.uuid}
-				isPlayerLocation={playerPosition.systemUuid === system.uuid}
+				uuid={sys.uuid}
+				name={sys.name ?? '???'}
+				x={sys.x}
+				y={sys.y}
+				scanLevel={sys.knowledge_level}
+				color={stellarColor(sys)}
+				hasWarpGate={systemsWithGates.has(sys.uuid)}
+				isInhabited={sys.is_inhabited ?? false}
+				isHazardous={sys.pirate_warning ?? false}
+				isSelected={selectedSystem === sys.uuid}
+				isPlayerLocation={playerPosition.systemUuid === sys.uuid}
 				showGates={filters.gates}
 				showInhabited={filters.inhabited}
 				showHazards={filters.hazards}
-				services={getSystemServices(system, scanLevel)}
+				services={getSystemServices(sys)}
 				onClick={onSystemClick}
-				onHover={handleSystemHover}
+				onHover={(data) => handleSystemHover({ ...data, knowledgeLabel: sys.knowledge_label, freshness: sys.freshness })}
 				onLeave={handleSystemLeave}
 			/>
 		{/each}
@@ -266,12 +312,14 @@
 
 	<!-- Selected system info overlay -->
 	{#if selectedSystem}
-		{@const selected = systems.find((s) => s.uuid === selectedSystem)}
+		{@const selected = knownSystems.find((s) => s.uuid === selectedSystem)}
 		{#if selected}
 			<div class="system-info-overlay">
-				<h4>{selected.name}</h4>
-				<p class="system-type">{selected.type}</p>
-				<p class="scan-level">Scan Level: {getScanLevel(selected.uuid)}</p>
+				<h4>{selected.name ?? '???'}</h4>
+				<p class="system-type">{selected.knowledge_label}</p>
+				{#if selected.stellar_class}
+					<p class="scan-level">{selected.stellar_class}{selected.stellar_description ? ' — ' + selected.stellar_description : ''}</p>
+				{/if}
 			</div>
 		{/if}
 	{/if}
@@ -281,16 +329,21 @@
 
 	<!-- Hover Tooltip -->
 	{#if hoveredSystem}
-		{@const risk = getRiskLevel(hoveredSystem.isHazardous, hoveredSystem.scanLevel)}
+		{@const risk = getRiskLevel(knownSystems.find(s => s.uuid === hoveredSystem?.uuid) ?? { knowledge_level: 0, pirate_warning: false } as KnownSystem)}
 		<div class="system-tooltip" style="left: {tooltipPosition.x}px; top: {tooltipPosition.y}px;">
 			<div class="tooltip-header">
 				<h4>{hoveredSystem.name}</h4>
-				<span class="scan-badge">L{hoveredSystem.scanLevel}</span>
+				<span class="scan-badge">{hoveredSystem.knowledgeLabel ?? `L${hoveredSystem.scanLevel}`}</span>
 			</div>
+
+			<!-- Freshness indicator -->
+			{#if hoveredSystem.freshness !== undefined && hoveredSystem.freshness < 0.3}
+				<div class="tooltip-stale">Stale intel</div>
+			{/if}
 
 			<!-- Risk indicator -->
 			<div class="tooltip-risk" style="color: {risk.color}">
-				<span class="risk-icon">{hoveredSystem.isHazardous ? ICONS.warning : ICONS.check}</span>
+				<span class="risk-icon">{risk.level === 'High Risk' ? ICONS.warning : ICONS.check}</span>
 				<span>{risk.level}</span>
 			</div>
 
@@ -314,10 +367,7 @@
 
 			<!-- Features -->
 			<div class="tooltip-features">
-				{#if hoveredSystem.hasWarpGate && hoveredSystem.scanLevel >= 2}
-					<span class="feature-badge warp">Warp Gate</span>
-				{/if}
-				{#if hoveredSystem.isInhabited && hoveredSystem.scanLevel >= 3}
+				{#if hoveredSystem.isInhabited && hoveredSystem.scanLevel >= 2}
 					<span class="feature-badge inhabited">Inhabited</span>
 				{/if}
 			</div>
@@ -414,6 +464,13 @@
 		font-weight: 600;
 	}
 
+	.tooltip-stale {
+		font-size: 0.65rem;
+		color: #f6ad55;
+		font-style: italic;
+		margin-bottom: 0.25rem;
+	}
+
 	.tooltip-risk {
 		display: flex;
 		align-items: center;
@@ -486,11 +543,6 @@
 		border-radius: 3px;
 		font-weight: 600;
 		text-transform: uppercase;
-	}
-
-	.feature-badge.warp {
-		background: rgba(168, 85, 247, 0.2);
-		color: #a855f7;
 	}
 
 	.feature-badge.inhabited {

@@ -13,6 +13,7 @@
 		x: number;
 		y: number;
 		scanLevel: number;
+		color?: string;
 		hasWarpGate: boolean;
 		isInhabited: boolean;
 		isHazardous: boolean;
@@ -43,6 +44,7 @@
 		x,
 		y,
 		scanLevel,
+		color,
 		hasWarpGate,
 		isInhabited,
 		isHazardous,
@@ -76,6 +78,8 @@
 	}
 
 	const scanColor = $derived(SCAN_COLORS[scanLevel] ?? SCAN_COLORS[0]);
+	const fillColor = $derived(color ?? scanColor.color);
+	const fillOpacity = $derived(color ? 1.0 : scanColor.opacity);
 
 	// Determine if node should be visible based on filters
 	const isVisible = $derived(() => {
@@ -119,14 +123,14 @@
 		<!-- Main star circle -->
 		<circle
 			r={nodeSize}
-			fill={scanColor.color}
-			opacity={scanColor.opacity}
+			fill={fillColor}
+			opacity={fillOpacity}
 			stroke={isSelected ? '#4299e1' : 'rgba(255,255,255,0.2)'}
 			stroke-width={isSelected ? 2 : 1}
 		/>
 
 		<!-- Feature indicators -->
-		{#if hasWarpGate && scanLevel >= 2}
+		{#if hasWarpGate && scanLevel >= 1}
 			<circle
 				r={nodeSize + 2}
 				fill="none"
@@ -143,6 +147,20 @@
 
 		{#if isHazardous && scanLevel >= 4}
 			<circle cx={-nodeSize - 2} cy={-nodeSize - 2} r="2" fill="#ef4444" />
+		{/if}
+
+		<!-- System name label for warp gate endpoints -->
+		{#if hasWarpGate && name !== '???' && !isPlayerLocation}
+			<text
+				y={nodeSize + 12}
+				text-anchor="middle"
+				fill="#a0aec0"
+				font-size="8"
+				font-weight="500"
+				class="system-label"
+			>
+				{name}
+			</text>
 		{/if}
 
 		<!-- Player location marker -->
@@ -218,6 +236,11 @@
 
 	.beacon-ring {
 		animation: beacon 3s ease-out infinite;
+	}
+
+	.system-label {
+		pointer-events: none;
+		opacity: 0.8;
 	}
 
 	.beacon-ring-outer {

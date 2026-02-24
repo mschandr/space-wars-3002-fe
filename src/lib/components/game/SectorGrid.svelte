@@ -14,9 +14,10 @@
 		gridSize?: number;
 		currentSystemUuid?: string;
 		onSectorClick?: (x: number, y: number) => void;
+		onNavigateToMap?: () => void;
 	}
 
-	let { sector, gridSize = 5, currentSystemUuid, onSectorClick }: Props = $props();
+	let { sector, gridSize = 5, currentSystemUuid, onSectorClick, onNavigateToMap }: Props = $props();
 
 	// Expanded state - shows the star map when true
 	let isExpanded = $state(false);
@@ -51,9 +52,12 @@
 	});
 
 	function handleCellClick(cell: { x: number; y: number; isCurrent: boolean }) {
-		// Only allow clicking on the current sector - expands to star map
 		if (cell.isCurrent) {
-			isExpanded = true;
+			if (onNavigateToMap) {
+				onNavigateToMap();
+			} else {
+				isExpanded = true;
+			}
 		}
 	}
 
@@ -131,7 +135,7 @@
 		{/if}
 
 		<div class="expand-hint">
-			<span class="hint-text">Click marker to view star map</span>
+			<span class="hint-text">Click marker to open star map</span>
 		</div>
 	</div>
 {/if}

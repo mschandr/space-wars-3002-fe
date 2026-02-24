@@ -14,11 +14,29 @@
 		playerCredits: number;
 		cargoSpace: number;
 		cargoItem?: CargoItem;
+		activeEvent?: MarketEvent;
+		priceHistory?: PriceSnapshot[];
 		onBuy: (mineralUuid: string, quantity: number) => Promise<void>;
 		onSell: (mineralUuid: string, quantity: number) => Promise<void>;
+		onError?: (message: string) => void;
 	}
 
-	let { item, playerCredits, cargoSpace, cargoItem, onBuy, onSell }: Props = $props();
+	let { item, playerCredits, cargoSpace, cargoItem, activeEvent, priceHistory, onBuy, onSell, onError }: Props = $props();
+
+	const eventBadgeColors: Record<string, { bg: string; text: string }> = {
+		shortage: { bg: 'rgba(239, 68, 68, 0.25)', text: '#fca5a5' },
+		surplus: { bg: 'rgba(34, 197, 94, 0.25)', text: '#86efac' },
+		boom: { bg: 'rgba(245, 158, 11, 0.25)', text: '#fcd34d' },
+		bust: { bg: 'rgba(59, 130, 246, 0.25)', text: '#93c5fd' }
+	};
+
+	const eventBadgeText = $derived(() => {
+		if (!activeEvent) return '';
+		const pct = activeEvent.price_change_percent
+			?? (activeEvent.price_multiplier - 1) * 100;
+		const sign = pct >= 0 ? '+' : '';
+		return `${activeEvent.event_type.toUpperCase()} ${sign}${pct.toFixed(0)}%`;
+	});
 
 	let showChart = $state(false);
 	let buyQuantity = $state(1);
@@ -64,7 +82,9 @@
 			await onBuy(item.mineral.uuid, buyQuantity);
 			buyQuantity = 1;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Purchase failed';
+			const msg = err instanceof Error ? err.message : 'Purchase failed';
+			error = msg;
+			onError?.(msg);
 		} finally {
 			isBuying = false;
 		}
@@ -78,7 +98,9 @@
 			await onSell(item.mineral.uuid, sellQuantity);
 			sellQuantity = 1;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Sale failed';
+			const msg = err instanceof Error ? err.message : 'Sale failed';
+			error = msg;
+			onError?.(msg);
 		} finally {
 			isSelling = false;
 		}
@@ -104,6 +126,15 @@
 			<span class="rarity-badge {rarityColors[item.mineral.rarity] || 'rarity-common'}">
 				{item.mineral.rarity.replace('_', ' ')}
 			</span>
+			{#if activeEvent}
+				{@const badgeColor = eventBadgeColors[activeEvent.event_type] ?? eventBadgeColors.shortage}
+				<span
+					class="event-badge"
+					style="background: {badgeColor.bg}; color: {badgeColor.text};"
+				>
+					{eventBadgeText()}
+				</span>
+			{/if}
 		</div>
 		<div class="mineral-stock">
 			<span class="stock-label">Stock:</span>
@@ -233,6 +264,27 @@
 		grid-template-columns: 1fr auto auto;
 		gap: 1rem;
 		align-items: start;
+		transition: border-color 0.3s, box-shadow 0.3s;
+	}
+
+	.mineral-row.event-active {
+		border-color: #f59e0b;
+		box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+		animation: event-pulse 3s ease-in-out infinite;
+	}
+
+	@keyframes event-pulse {
+		0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.15); }
+		50% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.3); }
+	}
+
+	.event-badge {
+		font-size: 0.55rem;
+		padding: 0.1rem 0.35rem;
+		border-radius: 3px;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		white-space: nowrap;
 	}
 
 	.mineral-info {
