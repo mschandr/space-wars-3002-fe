@@ -13,6 +13,7 @@
 	import GalaxyCard from '$lib/components/GalaxyCard.svelte';
 	import SpaceLoader from '$lib/components/SpaceLoader.svelte';
 	import { getCachedGalaxyList, cacheGalaxyList } from '$lib/galaxyCache';
+	import { tutorialState } from '$lib/stores/tutorialState.svelte';
 
 	let myGames = $state<GalaxySummary[]>([]);
 	let openGames = $state<GalaxySummary[]>([]);
@@ -33,6 +34,7 @@
 	let creationTime = $state<number | null>(null);
 
 	let refreshInterval = $state<ReturnType<typeof setInterval> | null>(null);
+	let consecutiveFailures = 0;
 
 	const gameModes: { id: GameMode; label: string; icon: string; desc: string }[] = [
 		{ id: 'multiplayer', label: 'Multiplayer', icon: '\u{1F465}', desc: 'Open to all players' },
@@ -46,7 +48,17 @@
 		{ value: 'large', label: 'Large', icon: '\u{1F4AB}' }
 	];
 
+	// Track number of games before creation to detect first galaxy
+	let gamesBeforeCreate = $state<number | null>(null);
+	let shouldStartTutorial = $state(false);
+
+	const isTutorialMode = $derived(
+		tutorialState.active && tutorialState.currentStep?.page === 'galaxies'
+	);
+
 	onMount(() => {
+		tutorialState.resume();
+
 		// Show cached data immediately (no loading state)
 		const cached = getCachedGalaxyList();
 		if (cached && (cached.my_games.length > 0 || cached.open_games.length > 0)) {
@@ -113,10 +125,29 @@
 			myGames = response.data.my_games;
 			openGames = response.data.open_games;
 			cacheGalaxyList(response.data);
+			// Reset failures on success — restore fast polling if we slowed down
+			if (consecutiveFailures >= 3) {
+				consecutiveFailures = 0;
+				switchPollingInterval(10000);
+			}
+			consecutiveFailures = 0;
+		} else {
+			consecutiveFailures++;
+			if (consecutiveFailures >= 3) {
+				switchPollingInterval(60000);
+			}
 		}
 	}
 
+	function switchPollingInterval(ms: number) {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+		}
+		refreshInterval = setInterval(refreshGalaxyList, ms);
+	}
+
 	function handleEnterGalaxy(galaxy: GalaxySummary) {
+		tutorialState.completeAction('enter_game');
 		goto(`${base}/galaxies/${galaxy.uuid}/play`);
 	}
 
@@ -139,6 +170,10 @@
 	function closeCreateModal() {
 		showCreateModal = false;
 		isCreating = false;
+		if (shouldStartTutorial) {
+			shouldStartTutorial = false;
+			tutorialState.start();
+		}
 	}
 
 	async function handleCreateGalaxy(e: Event) {
@@ -147,6 +182,7 @@
 		creationStats = null;
 		creationTime = null;
 		isCreating = true;
+		gamesBeforeCreate = myGames.length;
 
 		const payload = {
 			size_tier: createForm.size_tier,
@@ -168,6 +204,11 @@
 
 			// Refresh galaxy list
 			await loadGalaxies();
+
+			// Flag tutorial to start when the modal closes (so galaxy card is visible)
+			if (!tutorialState.isCompleted() && gamesBeforeCreate === 0) {
+				shouldStartTutorial = true;
+			}
 		} else {
 			createError = response.error?.message ?? response.message ?? 'Failed to create galaxy';
 			console.log('[CreateGalaxy] Error details:', response.error);
@@ -192,6 +233,9 @@
 			<span>SPACE WARS 3002</span>
 		</div>
 		<div class="header-actions">
+			{#if tutorialState.isCompleted() && !tutorialState.active}
+				<button class="btn-tutorial" onclick={() => tutorialState.restart()}>Restart Tutorial</button>
+			{/if}
 			<span class="user-name">{auth.user?.name}</span>
 			<button class="btn-logout" onclick={handleLogout}>Logout</button>
 		</div>
@@ -218,7 +262,7 @@
 					<h2 class="section-header">My Games</h2>
 					<div class="galaxy-grid">
 						{#each myGames as galaxy (galaxy.uuid)}
-							<GalaxyCard {galaxy} onEnter={handleEnterGalaxy} onViewMap={handleViewMap} />
+							<GalaxyCard {galaxy} onEnter={handleEnterGalaxy} onViewMap={handleViewMap} tutorialMode={isTutorialMode} />
 						{/each}
 					</div>
 				</section>
@@ -229,7 +273,7 @@
 					<h2 class="section-header">Open Games</h2>
 					<div class="galaxy-grid">
 						{#each openGames as galaxy (galaxy.uuid)}
-							<GalaxyCard {galaxy} onEnter={handleEnterGalaxy} onViewMap={handleViewMap} />
+							<GalaxyCard {galaxy} onEnter={handleEnterGalaxy} onViewMap={handleViewMap} tutorialMode={isTutorialMode} />
 						{/each}
 					</div>
 				</section>
@@ -410,6 +454,22 @@
 	.user-name {
 		color: #a0aec0;
 		font-size: 0.9rem;
+	}
+
+	.btn-tutorial {
+		background: transparent;
+		border: 1px solid #4a90a4;
+		color: #4a90a4;
+		padding: 0.375rem 0.75rem;
+		border-radius: 4px;
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.btn-tutorial:hover {
+		background: rgba(74, 144, 164, 0.15);
+		color: #63b3ed;
 	}
 
 	.btn-logout {

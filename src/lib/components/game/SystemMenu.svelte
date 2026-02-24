@@ -27,10 +27,15 @@
 		availableServices?: string[];
 		activeItem: MenuItemId | null;
 		onSelect: (item: MenuItemId) => void;
+		allowedItem?: string | null;
 	}
 
-	let { systemName, systemType, sector, availableServices = [], activeItem, onSelect }: Props =
+	let { systemName, systemType, sector, availableServices = [], activeItem, onSelect, allowedItem = null }: Props =
 		$props();
+
+	function isTutorialLocked(itemId: string): boolean {
+		return allowedItem !== null && allowedItem !== itemId;
+	}
 
 	// Service to menu item mapping (handles various naming conventions from backend)
 	const serviceMenuMap: Record<string, { id: MenuItemId; label: string; icon: string }> = {
@@ -167,6 +172,10 @@
 				<button
 					class="menu-item"
 					class:active={activeItem === item.id}
+					class:tutorial-locked={isTutorialLocked(item.id)}
+					class:tutorial-highlight={allowedItem === item.id}
+					data-tutorial="menu-{item.id}"
+					disabled={isTutorialLocked(item.id)}
 					onclick={() => onSelect(item.id)}
 				>
 					<span class="item-icon">{item.icon}</span>
@@ -187,6 +196,10 @@
 					<button
 						class="menu-item service-item"
 						class:active={activeItem === item.id}
+						class:tutorial-locked={isTutorialLocked(item.id)}
+						class:tutorial-highlight={allowedItem === item.id}
+						data-tutorial="menu-{item.id}"
+						disabled={isTutorialLocked(item.id)}
 						onclick={() => onSelect(item.id)}
 					>
 						<span class="item-icon">{item.icon}</span>
@@ -328,5 +341,24 @@
 		font-size: 0.75rem;
 		color: #718096;
 		font-style: italic;
+	}
+
+	.menu-item.tutorial-locked {
+		opacity: 0.4;
+		pointer-events: none;
+	}
+
+	.menu-item.tutorial-highlight {
+		box-shadow: 0 0 8px rgba(99, 179, 237, 0.5);
+		animation: tutorial-menu-pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes tutorial-menu-pulse {
+		0%, 100% {
+			box-shadow: 0 0 4px rgba(99, 179, 237, 0.3);
+		}
+		50% {
+			box-shadow: 0 0 12px rgba(99, 179, 237, 0.6);
+		}
 	}
 </style>

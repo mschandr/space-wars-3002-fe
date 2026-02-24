@@ -15,7 +15,11 @@
 	let { hasShip, hull, shield, fuel, distance, cooldown, collision, clamp }: Props = $props();
 </script>
 
+<<<<<<< Updated upstream
 <aside class="player-stats">
+=======
+<aside class="player-stats" class:compact data-tutorial="player-stats">
+>>>>>>> Stashed changes
 	<div class="stats-header">
 		<span class="header-icon">&#9632;</span>
 		<span>Ship Status</span>

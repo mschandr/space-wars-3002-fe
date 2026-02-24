@@ -1,6 +1,13 @@
 <script lang="ts">
 	import PriceDisplay from './PriceDisplay.svelte';
+<<<<<<< Updated upstream
 	import type { HubInventoryItem, CargoItem } from '$lib/api';
+=======
+	import PriceSparkline from './PriceSparkline.svelte';
+	import PriceChart from './PriceChart.svelte';
+	import type { HubInventoryItem, CargoItem, MarketEvent } from '$lib/api';
+	import type { PriceSnapshot } from '$lib/priceHistory';
+>>>>>>> Stashed changes
 
 	interface Props {
 		item: HubInventoryItem;
@@ -13,6 +20,7 @@
 
 	let { item, playerCredits, cargoSpace, cargoItem, onBuy, onSell }: Props = $props();
 
+	let showChart = $state(false);
 	let buyQuantity = $state(1);
 	let sellQuantity = $state(1);
 	let isBuying = $state(false);
@@ -20,7 +28,7 @@
 	let error = $state<string | null>(null);
 
 	const maxBuyQuantity = $derived(() => {
-		const affordableQuantity = Math.floor(playerCredits / item.buy_price);
+		const affordableQuantity = Math.floor(playerCredits / item.sell_price);
 		const fitQuantity = cargoSpace;
 		const availableQuantity = item.quantity;
 		return Math.min(affordableQuantity, fitQuantity, availableQuantity);
@@ -31,14 +39,14 @@
 	const canBuy = $derived(
 		buyQuantity > 0 &&
 			buyQuantity <= maxBuyQuantity() &&
-			playerCredits >= item.buy_price * buyQuantity &&
+			playerCredits >= item.sell_price * buyQuantity &&
 			cargoSpace >= buyQuantity
 	);
 
 	const canSell = $derived(sellQuantity > 0 && sellQuantity <= maxSellQuantity);
 
-	const buyTotal = $derived(item.buy_price * buyQuantity);
-	const sellTotal = $derived(item.sell_price * sellQuantity);
+	const buyTotal = $derived(item.sell_price * buyQuantity);
+	const sellTotal = $derived(item.buy_price * sellQuantity);
 
 	const rarityColors: Record<string, string> = {
 		common: 'rarity-common',
@@ -85,7 +93,11 @@
 	}
 </script>
 
+<<<<<<< Updated upstream
 <div class="mineral-row">
+=======
+<div class="mineral-row" class:event-active={activeEvent} data-tutorial="mineral-row-{item.mineral.name.toLowerCase().replace(/\s+/g, '-')}">
+>>>>>>> Stashed changes
 	<div class="mineral-info">
 		<div class="mineral-header">
 			<span class="mineral-name">{item.mineral.name}</span>
@@ -103,11 +115,33 @@
 		<div class="price-row">
 			<span class="price-label">Buy:</span>
 			<PriceDisplay price={item.buy_price} basePrice={item.mineral.base_price} showIndicator />
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 		</div>
 		<div class="price-row">
 			<span class="price-label">Sell:</span>
 			<PriceDisplay price={item.sell_price} basePrice={item.mineral.base_price} showIndicator />
 		</div>
+<<<<<<< Updated upstream
+=======
+		{#if priceHistory && priceHistory.length >= 2}
+			<div class="sparkline-row">
+				<span class="sparkline-label">Buy:</span>
+				<PriceSparkline snapshots={priceHistory} field="buy_price" />
+				<span class="sparkline-label">Sell:</span>
+				<PriceSparkline snapshots={priceHistory} field="sell_price" />
+				<button
+					class="chart-expand-btn"
+					onclick={() => showChart = true}
+					title="View combined price chart"
+				>
+					&#x1F4CA;
+				</button>
+			</div>
+		{/if}
+>>>>>>> Stashed changes
 	</div>
 
 	<div class="action-section">
@@ -180,6 +214,14 @@
 		<div class="error-message">{error}</div>
 	{/if}
 </div>
+
+{#if showChart && priceHistory && priceHistory.length >= 2}
+	<PriceChart
+		snapshots={priceHistory}
+		mineralName={item.mineral.name}
+		onClose={() => showChart = false}
+	/>
+{/if}
 
 <style>
 	.mineral-row {
@@ -278,6 +320,45 @@
 		width: 30px;
 	}
 
+<<<<<<< Updated upstream
+=======
+	.sparkline-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: 0.25rem;
+		padding-top: 0.25rem;
+		border-top: 1px solid rgba(74, 85, 104, 0.4);
+	}
+
+	.sparkline-label {
+		font-size: 0.55rem;
+		color: #718096;
+		text-transform: uppercase;
+		width: 24px;
+		flex-shrink: 0;
+	}
+
+	.chart-expand-btn {
+		background: none;
+		border: 1px solid transparent;
+		border-radius: 3px;
+		cursor: pointer;
+		font-size: 0.75rem;
+		line-height: 1;
+		padding: 0.1rem 0.2rem;
+		margin-left: 0.15rem;
+		opacity: 0.5;
+		transition: opacity 0.15s, border-color 0.15s;
+		flex-shrink: 0;
+	}
+
+	.chart-expand-btn:hover {
+		opacity: 1;
+		border-color: #4a5568;
+	}
+
+>>>>>>> Stashed changes
 	.action-section {
 		display: flex;
 		flex-direction: column;

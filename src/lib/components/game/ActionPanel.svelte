@@ -3,6 +3,11 @@
 	import { api, type ShipTemplate, type ShipCatalogItem, type LocalBodiesResponse, type OrbitalBody } from '$lib/api';
 	import TradingPanel from './TradingPanel.svelte';
 	import WarpLoader from './WarpLoader.svelte';
+<<<<<<< Updated upstream
+=======
+	import MarketEventsPanel from './MarketEventsPanel.svelte';
+	import { tutorialState } from '$lib/stores/tutorialState.svelte';
+>>>>>>> Stashed changes
 
 	// Menu item types matching SystemMenu
 	type MenuItemId =
@@ -425,6 +430,39 @@
 		isPurchasing = false;
 	}
 
+<<<<<<< Updated upstream
+=======
+	async function handleChristenShip() {
+		if (!namingShipUuid || !newShipName.trim() || isNaming) return;
+
+		isNaming = true;
+		namingMessage = null;
+
+		const result = await playerState.renameShip(namingShipUuid, newShipName.trim());
+
+		if (result) {
+			namingMessage = `Ship christened: ${result.ship.name}!`;
+			tutorialState.completeAction('take_free_ship');
+			setTimeout(() => {
+				showNamingPrompt = false;
+				namingMessage = null;
+			}, 2000);
+		} else {
+			namingMessage = 'Failed to name ship. You can rename it later from the ship panel.';
+		}
+
+		isNaming = false;
+	}
+
+	function skipNaming() {
+		showNamingPrompt = false;
+		namingShipUuid = null;
+		newShipName = '';
+		namingMessage = null;
+		tutorialState.completeAction('take_free_ship');
+	}
+
+>>>>>>> Stashed changes
 	function handleServiceClick(service: string) {
 		if (service === 'ship_shop') {
 			loadShipyard();
@@ -450,7 +488,7 @@
 	const tradingHub = $derived(locationDetails?.has?.trading_hub);
 </script>
 
-<div class="action-panel">
+<div class="action-panel" data-tutorial="action-panel">
 	{#if !activeItem}
 		<div class="panel-placeholder">
 			<p>Select a destination from the menu</p>
@@ -806,9 +844,14 @@
 					<div class="loading">Loading warp gates...</div>
 				{:else if gateEntries.length > 0}
 					<div class="warp-gates-list">
+<<<<<<< Updated upstream
 						{#each gateEntries as [gateUuid, gate] (gateUuid)}
+=======
+						{#each sortedGates as [gateUuid, gate], idx (gateUuid)}
+>>>>>>> Stashed changes
 							<button
 								class="warp-gate-item"
+								data-tutorial={idx === 0 ? 'warp-gate-first' : undefined}
 								onclick={() =>
 									showTravelConfirmation({
 										uuid: gate.destination_uuid,

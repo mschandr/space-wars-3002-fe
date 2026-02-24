@@ -9,6 +9,7 @@
 	import ActionPanel from '$lib/components/game/ActionPanel.svelte';
 	import SectorGrid from '$lib/components/game/SectorGrid.svelte';
 	import SpaceLoader from '$lib/components/SpaceLoader.svelte';
+	import { tutorialState } from '$lib/stores/tutorialState.svelte';
 
 	// Menu item types matching SystemMenu
 	type MenuItemId =
@@ -56,6 +57,8 @@
 	let createError = $state('');
 
 	onMount(() => {
+		tutorialState.resume();
+
 		const token = localStorage.getItem('auth_token');
 		if (!token) {
 			goto(`${base}/login`);
@@ -130,6 +133,7 @@
 		isCreatingPlayer = false;
 
 		if (success) {
+			tutorialState.completeAction('submit_callsign');
 			loadCurrentSystemData();
 		} else {
 			createError = playerState.error || 'Failed to join galaxy';
@@ -138,6 +142,8 @@
 
 	function handleMenuSelect(item: MenuItemId) {
 		activeMenuItem = item;
+		// Notify tutorial — menu item IDs map to step completion
+		tutorialState.completeAction(item);
 	}
 
 	function handleAction(action: string, targetUuid?: string) {
@@ -147,11 +153,12 @@
 
 	async function handleTravelComplete() {
 		console.log('[PlayPage] Travel complete, reloading location data');
-		// Reload location details for the new system
 		await loadCurrentSystemData();
+		tutorialState.completeAction('warp_to_nearest');
 	}
 
 	function navigateToMap() {
+		tutorialState.completeAction('click_star_map');
 		goto(`${base}/galaxies/${data.galaxyUuid}/play/map`);
 	}
 
@@ -176,12 +183,21 @@
 					<span class="galaxy-name">{playerState.galaxyName}</span>
 					<span class="separator">|</span>
 				{/if}
-				<a href="{base}/galaxies" class="link-secondary">Change galaxy</a>
+				{#if !tutorialState.active || tutorialState.currentStep?.page !== 'play' || tutorialState.currentStep?.id === 'tutorial_complete'}
+					<a href="{base}/galaxies" class="link-secondary">Change galaxy</a>
+				{/if}
 			</div>
 		</div>
 		<div class="header-right">
 			{#if playerState.playerUuid}
-				<button class="btn-map" onclick={navigateToMap}> Star Map </button>
+				<button
+					class="btn-map"
+					data-tutorial="btn-star-map"
+					onclick={navigateToMap}
+					disabled={tutorialState.active && tutorialState.currentStep?.page === 'play' && tutorialState.currentStep?.id !== 'click_star_map' && tutorialState.currentStep?.id !== 'tutorial_complete'}
+				>
+					Star Map
+				</button>
 			{/if}
 		</div>
 	</header>
@@ -214,6 +230,7 @@
 							<input
 								type="text"
 								id="call-sign"
+								data-tutorial="callsign-input"
 								bind:value={callSignInput}
 								placeholder="Enter your call sign"
 								minlength="3"
@@ -227,7 +244,7 @@
 							<button type="button" class="btn btn-cancel" onclick={navigateBack}>
 								Back to Galaxies
 							</button>
-							<button type="submit" class="btn btn-submit" disabled={isCreatingPlayer}>
+							<button type="submit" class="btn btn-submit" data-tutorial="callsign-submit" disabled={isCreatingPlayer}>
 								{#if isCreatingPlayer}
 									Creating...
 								{:else}
@@ -247,7 +264,7 @@
 			</button>
 		</div>
 	{:else}
-		<main class="game-main">
+		<main class="game-main" data-tutorial="game-main">
 			<div class="left-panel">
 				<SystemMenu
 					systemName={playerState.currentSystem?.name ?? 'Unknown System'}
@@ -256,6 +273,7 @@
 					availableServices={availableServices}
 					activeItem={activeMenuItem}
 					onSelect={handleMenuSelect}
+					allowedItem={tutorialState.active && tutorialState.currentStep?.page === 'play' ? tutorialState.allowedMenuItem : null}
 				/>
 
 				<SectorGrid
@@ -279,6 +297,7 @@
 			/>
 		</main>
 	{/if}
+
 </div>
 
 <style>
@@ -358,8 +377,13 @@
 		transition: all 0.15s;
 	}
 
-	.btn-map:hover {
+	.btn-map:hover:not(:disabled) {
 		background: linear-gradient(to bottom, #718096, #4a5568);
+	}
+
+	.btn-map:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	.loading-container,

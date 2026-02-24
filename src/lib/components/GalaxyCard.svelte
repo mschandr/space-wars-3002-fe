@@ -5,9 +5,10 @@
 		galaxy: GalaxySummary;
 		onEnter: (galaxy: GalaxySummary) => void;
 		onViewMap: (galaxy: GalaxySummary) => void;
+		tutorialMode?: boolean;
 	}
 
-	let { galaxy, onEnter, onViewMap }: Props = $props();
+	let { galaxy, onEnter, onViewMap, tutorialMode = false }: Props = $props();
 
 	function getSizeLabel(size: string): string {
 		return size.charAt(0).toUpperCase() + size.slice(1);
@@ -56,8 +57,10 @@
 		</div>
 
 		<div class="button-row">
-			<button class="btn btn-continue" onclick={() => onEnter(galaxy)}>Continue</button>
-			<button class="btn btn-map" onclick={() => onViewMap(galaxy)}>View Map</button>
+			<button class="btn btn-continue" data-tutorial="galaxy-card-enter" onclick={() => onEnter(galaxy)}>Continue</button>
+			{#if !tutorialMode}
+				<button class="btn btn-map" onclick={() => onViewMap(galaxy)}>View Map</button>
+			{/if}
 		</div>
 	</div>
 </div>

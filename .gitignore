@@ -7,6 +7,7 @@ CLAUDE.md
 GalaxySelect.png
 InSystemMenu.png
 LoginScreen.png
+SectorMap.png
 StarMapScreen.png
 
 # Output
@@ -41,3 +42,5 @@ yarn-error.log*
 pnpm-debug.log*
 
 2026-01-19-command-messageinitcommand-message.txt
+
+docs_old/

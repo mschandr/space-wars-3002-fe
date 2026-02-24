@@ -1,5 +1,11 @@
 <script lang="ts">
 	import { playerState } from '$lib/stores/playerState.svelte';
+<<<<<<< Updated upstream
+=======
+
+	import type { MarketEvent } from '$lib/api';
+	import { recordPrices, getHistory } from '$lib/priceHistory';
+>>>>>>> Stashed changes
 	import MineralRow from './MineralRow.svelte';
 	import CargoManifest from './CargoManifest.svelte';
 	import PriceDisplay from './PriceDisplay.svelte';

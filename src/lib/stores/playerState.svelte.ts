@@ -434,7 +434,7 @@ function createPlayerState() {
 				await loadCargo();
 				// Reload hub inventory to get updated quantities
 				await loadTradingHubInventory(hubUuid);
-				console.log('[PlayerState] Purchase successful:', response.data);
+				console.log('[PlayerState] Purchase successful:', response.data.xp_earned);
 				return response.data;
 			} else {
 				console.error('[PlayerState] Buy failed:', response.error);
