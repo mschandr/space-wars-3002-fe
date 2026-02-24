@@ -140,7 +140,6 @@
 				};
 
 				// Ensure the player's current system is at least knowledge level 4
-				// Ensure the player's current system is at least knowledge level 4
 				const curSys = playerState.currentSystem;
 				if (curSys) {
 					const idx = knownSystems.findIndex(s => s.uuid === curSys.uuid);
@@ -312,19 +311,7 @@
 		goto(`${base}/galaxies/${data.galaxyUuid}/play`);
 	}
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-	// Player position for map centering
-	const playerPosition = $derived(() => {
-		const currentUuid = playerState.currentSystem?.uuid;
-		const currentSystem = systems.find((s) => s.uuid === currentUuid);
-		return {
-			x: currentSystem?.position.x ?? galaxyBounds.width / 2,
-			y: currentSystem?.position.y ?? galaxyBounds.height / 2,
-			systemUuid: currentUuid ?? ''
-		};
-	});
-=======
+
 	// Auto-navigate back to play when tutorial advances past map steps
 	$effect(() => {
 		if (tutorialState.active && tutorialState.currentStep?.page === 'play') {
@@ -332,8 +319,6 @@
 		}
 	});
 
-=======
->>>>>>> origin/Feat/SectorMap-tng
 	async function handleRenameShip(uuid: string, name: string): Promise<boolean> {
 		const result = await playerState.renameShip(uuid, name);
 		return !!result;
@@ -408,10 +393,7 @@
 
 		return rows.reverse();
 	}
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> origin/Feat/SectorMap-tng
+
 </script>
 
 <svelte:head>
@@ -447,17 +429,9 @@
 			<p class="error-message">{loadError || playerState.error}</p>
 			<button class="btn-retry" onclick={loadMapData}> Retry </button>
 		</div>
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
 	{:else if mapView === 'sectors'}
 		<main class="map-main">
 			<div class="map-area" data-tutorial="map-area">
-=======
-	{:else if mapView === 'sectors'}
-		<main class="map-main">
-			<div class="map-area">
->>>>>>> origin/Feat/SectorMap-tng
 				<SectorMap
 					sectors={sectorViewEntries}
 					knownSystems={knownSystems}
@@ -467,11 +441,7 @@
 					playerSystemUuid={playerState.currentSystem?.uuid}
 					onSectorClick={handleSectorClick}
 					onStarHover={(star) => hoveredMapStar = star}
-<<<<<<< HEAD
-					onStarSelect={(star) => { selectedMapStar = star; if (star) tutorialState.completeAction('click_nearby_star'); }}
-=======
 					onStarSelect={(star) => selectedMapStar = star}
->>>>>>> origin/Feat/SectorMap-tng
 				/>
 			</div>
 
@@ -489,11 +459,7 @@
 				/>
 
 				<!-- System info panel -->
-<<<<<<< HEAD
 				<div class="system-info-panel" data-tutorial="system-info-panel">
-=======
-				<div class="system-info-panel">
->>>>>>> origin/Feat/SectorMap-tng
 					{#if displayMapStar}
 						<div class="sip-header">
 							<span class="sip-name" style="color: {starColor(displayMapStar)}">{displayMapStar.name ?? 'Unknown System'}</span>
@@ -593,10 +559,6 @@
 				/>
 			</div>
 		{/if}
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> origin/Feat/SectorMap-tng
 	{:else}
 		<main class="map-main">
 			<div class="map-area" data-tutorial="map-area">

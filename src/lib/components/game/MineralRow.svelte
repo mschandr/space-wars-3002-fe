@@ -1,19 +1,9 @@
 <script lang="ts">
 	import PriceDisplay from './PriceDisplay.svelte';
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-	import type { HubInventoryItem, CargoItem } from '$lib/api';
-=======
 	import PriceSparkline from './PriceSparkline.svelte';
 	import PriceChart from './PriceChart.svelte';
 	import type { HubInventoryItem, CargoItem, MarketEvent } from '$lib/api';
 	import type { PriceSnapshot } from '$lib/priceHistory';
->>>>>>> Stashed changes
-=======
-	import PriceSparkline from './PriceSparkline.svelte';
-	import type { HubInventoryItem, CargoItem, MarketEvent } from '$lib/api';
-	import type { PriceSnapshot } from '$lib/priceHistory';
->>>>>>> origin/Feat/SectorMap-tng
 
 	interface Props {
 		item: HubInventoryItem;
@@ -121,15 +111,7 @@
 	}
 </script>
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-<div class="mineral-row">
-=======
-<div class="mineral-row" class:event-active={activeEvent} data-tutorial="mineral-row-{item.mineral.name.toLowerCase().replace(/\s+/g, '-')}">
->>>>>>> Stashed changes
-=======
 <div class="mineral-row" class:event-active={activeEvent}>
->>>>>>> origin/Feat/SectorMap-tng
 	<div class="mineral-info">
 		<div class="mineral-header">
 			<span class="mineral-name">{item.mineral.name}</span>
@@ -156,31 +138,17 @@
 		<div class="price-row">
 			<span class="price-label">Buy:</span>
 			<PriceDisplay price={item.buy_price} basePrice={item.mineral.base_price} showIndicator />
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
-=======
-			<!-- TODO(human): Decide the sparkline layout — inline next to price, or stacked below? -->
->>>>>>> origin/Feat/SectorMap-tng
 		</div>
 		<div class="price-row">
 			<span class="price-label">Sell:</span>
 			<PriceDisplay price={item.sell_price} basePrice={item.mineral.base_price} showIndicator />
 		</div>
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> origin/Feat/SectorMap-tng
 		{#if priceHistory && priceHistory.length >= 2}
 			<div class="sparkline-row">
 				<span class="sparkline-label">Buy:</span>
 				<PriceSparkline snapshots={priceHistory} field="buy_price" />
 				<span class="sparkline-label">Sell:</span>
 				<PriceSparkline snapshots={priceHistory} field="sell_price" />
-<<<<<<< HEAD
 				<button
 					class="chart-expand-btn"
 					onclick={() => showChart = true}
@@ -190,11 +158,6 @@
 				</button>
 			</div>
 		{/if}
->>>>>>> Stashed changes
-=======
-			</div>
-		{/if}
->>>>>>> origin/Feat/SectorMap-tng
 	</div>
 
 	<div class="action-section">
@@ -394,11 +357,6 @@
 		width: 30px;
 	}
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> origin/Feat/SectorMap-tng
 	.sparkline-row {
 		display: flex;
 		align-items: center;
@@ -416,7 +374,6 @@
 		flex-shrink: 0;
 	}
 
-<<<<<<< HEAD
 	.chart-expand-btn {
 		background: none;
 		border: 1px solid transparent;
@@ -436,9 +393,6 @@
 		border-color: #4a5568;
 	}
 
->>>>>>> Stashed changes
-=======
->>>>>>> origin/Feat/SectorMap-tng
 	.action-section {
 		display: flex;
 		flex-direction: column;

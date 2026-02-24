@@ -113,15 +113,8 @@
 	}
 </script>
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-<aside class="player-stats">
-=======
+
 <aside class="player-stats" class:compact data-tutorial="player-stats">
->>>>>>> Stashed changes
-=======
-<aside class="player-stats" class:compact>
->>>>>>> origin/Feat/SectorMap-tng
 	<div class="stats-header">
 		<span class="header-icon">&#9632;</span>
 		{#if isEditing}
