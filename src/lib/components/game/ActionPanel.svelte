@@ -3,11 +3,15 @@
 	import { api, type ShipyardItem, type ShipCatalogItem, type LocalBodiesResponse, type OrbitalBody, type SalvageYardResponse, type SalvageInventoryItem, type MarketEventType } from '$lib/api';
 	import TradingPanel from './TradingPanel.svelte';
 	import WarpLoader from './WarpLoader.svelte';
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
 	import MarketEventsPanel from './MarketEventsPanel.svelte';
 	import { tutorialState } from '$lib/stores/tutorialState.svelte';
 >>>>>>> Stashed changes
+=======
+	import MarketEventsPanel from './MarketEventsPanel.svelte';
+>>>>>>> origin/Feat/SectorMap-tng
 
 	// Menu item types matching SystemMenu
 	type MenuItemId =
@@ -548,8 +552,11 @@
 		isPurchasing = false;
 	}
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
+=======
+>>>>>>> origin/Feat/SectorMap-tng
 	async function handleChristenShip() {
 		if (!namingShipUuid || !newShipName.trim() || isNaming) return;
 
@@ -560,7 +567,10 @@
 
 		if (result) {
 			namingMessage = `Ship christened: ${result.ship.name}!`;
+<<<<<<< HEAD
 			tutorialState.completeAction('take_free_ship');
+=======
+>>>>>>> origin/Feat/SectorMap-tng
 			setTimeout(() => {
 				showNamingPrompt = false;
 				namingMessage = null;
@@ -577,10 +587,15 @@
 		namingShipUuid = null;
 		newShipName = '';
 		namingMessage = null;
+<<<<<<< HEAD
 		tutorialState.completeAction('take_free_ship');
 	}
 
 >>>>>>> Stashed changes
+=======
+	}
+
+>>>>>>> origin/Feat/SectorMap-tng
 	function handleServiceClick(service: string) {
 		if (service === 'ship_shop') {
 			loadShipyard();
@@ -1127,11 +1142,15 @@
 						</button>
 					</div>
 					<div class="warp-gates-list">
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 						{#each gateEntries as [gateUuid, gate] (gateUuid)}
 =======
 						{#each sortedGates as [gateUuid, gate], idx (gateUuid)}
 >>>>>>> Stashed changes
+=======
+						{#each sortedGates as [gateUuid, gate] (gateUuid)}
+>>>>>>> origin/Feat/SectorMap-tng
 							<button
 								class="warp-gate-item"
 								data-tutorial={idx === 0 ? 'warp-gate-first' : undefined}

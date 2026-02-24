@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { playerState } from '$lib/stores/playerState.svelte';
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
 
 	import type { MarketEvent } from '$lib/api';
 	import { recordPrices, getHistory } from '$lib/priceHistory';
 >>>>>>> Stashed changes
+=======
+	import type { MarketEvent } from '$lib/api';
+	import { recordPrices, getHistory } from '$lib/priceHistory';
+>>>>>>> origin/Feat/SectorMap-tng
 	import MineralRow from './MineralRow.svelte';
 	import PriceDisplay from './PriceDisplay.svelte';
 	import MarketEventsPanel from './MarketEventsPanel.svelte';
