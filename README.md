@@ -32,7 +32,7 @@ npm install
 
 The dev server binds to a custom hostname. Add this to your `/etc/hosts`:
 
-```
+```text
 127.0.0.1  space-wars-3002-fe.local
 ```
 
@@ -78,7 +78,7 @@ All test files require at least one assertion (`expect.requireAssertions: true` 
 
 ## Project Structure
 
-```
+```text
 src/
 ├── lib/
 │   ├── api.ts                          # REST API client (all endpoints + types)

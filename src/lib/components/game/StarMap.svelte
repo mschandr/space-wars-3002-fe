@@ -60,7 +60,7 @@
 		if (svgElement && containerElement) {
 			const rect = containerElement.getBoundingClientRect();
 			const svgRect = svgElement.getBoundingClientRect();
-			const viewBoxParts = viewBox().split(' ').map(Number);
+			const viewBoxParts = viewBox.split(' ').map(Number);
 			const vbX = viewBoxParts[0];
 			const vbY = viewBoxParts[1];
 			const vbW = viewBoxParts[2];
@@ -106,7 +106,7 @@
 	});
 
 	// Get risk level description
-	function getRiskLevel(sys: KnownSystem): { level: string; color: string } {
+	function getRiskLevel(sys: Pick<KnownSystem, 'knowledge_level' | 'pirate_warning'>): { level: string; color: string } {
 		if (sys.knowledge_level < 3) {
 			return { level: 'Unknown', color: '#718096' };
 		}
@@ -149,7 +149,7 @@
 	const viewBoxWidth = $derived(galaxyBounds.width / zoom);
 	const viewBoxHeight = $derived(galaxyBounds.height / zoom);
 
-	const viewBox = $derived(() => {
+	const viewBox = $derived.by(() => {
 		const centerX = playerPosition.x - viewBoxWidth / 2 + panOffset.x;
 		const centerY = playerPosition.y - viewBoxHeight / 2 + panOffset.y;
 		return `${centerX} ${centerY} ${viewBoxWidth} ${viewBoxHeight}`;
@@ -190,7 +190,7 @@
 	<svg
 		bind:this={svgElement}
 		class="star-map"
-		viewBox={viewBox()}
+		viewBox={viewBox}
 		preserveAspectRatio="xMidYMid meet"
 		onmousedown={handleMouseDown}
 		onmousemove={handleMouseMove}
@@ -329,7 +329,7 @@
 
 	<!-- Hover Tooltip -->
 	{#if hoveredSystem}
-		{@const risk = getRiskLevel(knownSystems.find(s => s.uuid === hoveredSystem?.uuid) ?? { knowledge_level: 0, pirate_warning: false } as KnownSystem)}
+		{@const risk = getRiskLevel(knownSystems.find(s => s.uuid === hoveredSystem?.uuid) ?? { knowledge_level: 0, pirate_warning: false })}
 		<div class="system-tooltip" style="left: {tooltipPosition.x}px; top: {tooltipPosition.y}px;">
 			<div class="tooltip-header">
 				<h4>{hoveredSystem.name}</h4>

@@ -460,7 +460,7 @@ export interface ShipyardItem {
 		class: string;
 		class_info?: ShipClassInfo;
 		description?: string;
-		base_price?: string;
+		base_price?: number;
 		rarity?: string;
 		requirements?: { level: number };
 		is_available?: boolean;

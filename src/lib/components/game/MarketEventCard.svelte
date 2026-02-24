@@ -27,14 +27,16 @@
 		return () => clearInterval(interval);
 	});
 
-	// TODO(human): Implement this function
-	// Takes remaining seconds (number | null) and returns a human-readable countdown string.
-	// Consider: What granularity to show (days? hours? minutes? seconds?),
-	// how to handle null/zero/negative values, and whether the format should
-	// change as time gets shorter (e.g. "2d 5h" vs "45m 30s" vs "EXPIRED").
 	function formatTimeRemaining(seconds: number | null): string {
 		if (seconds == null || seconds <= 0) return 'EXPIRED';
-		return `${seconds}s`;
+		const d = Math.floor(seconds / 86400);
+		const h = Math.floor((seconds % 86400) / 3600);
+		const m = Math.floor((seconds % 3600) / 60);
+		const s = Math.floor(seconds % 60);
+		if (d >= 1) return `${d}d ${h}h`;
+		if (h >= 1) return `${h}h ${m}m`;
+		if (m >= 1) return `${m}m ${s}s`;
+		return `${s}s`;
 	}
 
 	const eventColors: Record<string, { bg: string; border: string; text: string }> = {
@@ -46,7 +48,7 @@
 
 	const colors = $derived(eventColors[event.event_type] ?? eventColors.shortage);
 
-	const priceChangeDisplay = $derived(() => {
+	const priceChangeDisplay = $derived.by(() => {
 		if (event.price_change_percent != null) {
 			const sign = event.price_change_percent >= 0 ? '+' : '';
 			return `${sign}${event.price_change_percent.toFixed(0)}%`;
@@ -75,9 +77,9 @@
 				<span class="mineral-symbol">({event.mineral.symbol})</span>
 			{/if}
 		</span>
-		{#if priceChangeDisplay()}
+		{#if priceChangeDisplay}
 			<span class="price-change" style="color: {colors.text};">
-				{priceChangeDisplay()}
+				{priceChangeDisplay}
 			</span>
 		{/if}
 	</div>

@@ -61,15 +61,19 @@
 		isSubmitting = true;
 		renameError = null;
 
-		const success = await onRename(shipUuid, trimmed);
+		try {
+			const success = await onRename(shipUuid, trimmed);
 
-		if (success) {
-			isEditing = false;
-		} else {
-			renameError = 'Rename failed — check credits or try again.';
+			if (success) {
+				isEditing = false;
+			} else {
+				renameError = 'Rename failed — check credits or try again.';
+			}
+		} catch (err) {
+			renameError = err instanceof Error ? err.message : 'Rename failed — please try again.';
+		} finally {
+			isSubmitting = false;
 		}
-
-		isSubmitting = false;
 	}
 
 	function handleKeydown(event: KeyboardEvent) {

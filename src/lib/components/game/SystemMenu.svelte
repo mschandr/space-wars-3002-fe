@@ -159,8 +159,6 @@
 		return serviceItems;
 	});
 
-	// Combined menu items
-	const allMenuItems = $derived([...coreMenuItems, ...dynamicMenuItems]);
 </script>
 
 <nav class="system-menu">
@@ -197,7 +195,7 @@
 		<!-- Separator if there are services -->
 		{#if dynamicMenuItems.length > 0}
 			<li class="menu-separator">
-				<span class="separator-label">Trading Hub</span>
+				<span class="separator-label">Station Services</span>
 			</li>
 
 			<!-- Dynamic service items -->

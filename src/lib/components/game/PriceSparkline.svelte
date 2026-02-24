@@ -14,8 +14,9 @@
 	const HEIGHT = 24;
 	const PADDING = 2;
 
-	const points = $derived.by(() => {
-		if (snapshots.length < 2) return '';
+	// Precompute sparkline geometry once — shared by polyline points and circle positions
+	const sparkline = $derived.by(() => {
+		if (snapshots.length < 2) return null;
 		const values = snapshots.map((s) => s[field]);
 		const min = Math.min(...values);
 		const max = Math.max(...values);
@@ -23,13 +24,14 @@
 		const usableW = WIDTH - PADDING * 2;
 		const usableH = HEIGHT - PADDING * 2;
 
-		return snapshots
-			.map((s, i) => {
-				const x = PADDING + (i / (snapshots.length - 1)) * usableW;
-				const y = PADDING + usableH - ((s[field] - min) / range) * usableH;
-				return `${x.toFixed(1)},${y.toFixed(1)}`;
-			})
-			.join(' ');
+		const coords = snapshots.map((s, i) => ({
+			x: PADDING + (i / (snapshots.length - 1)) * usableW,
+			y: PADDING + usableH - ((s[field] - min) / range) * usableH
+		}));
+
+		const pointString = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+
+		return { coords, pointString };
 	});
 
 	let hoveredIndex = $state<number | null>(null);
@@ -48,7 +50,7 @@
 	}
 </script>
 
-{#if snapshots.length < 2}
+{#if !sparkline}
 	<span class="sparkline-empty">--</span>
 {:else}
 	<span class="sparkline-container">
@@ -59,23 +61,17 @@
 			class="sparkline-svg"
 		>
 			<polyline
-				points={points}
+				points={sparkline.pointString}
 				fill="none"
 				stroke={color}
 				stroke-width="1.5"
 				stroke-linejoin="round"
 				stroke-linecap="round"
 			/>
-			{#each snapshots as snap, i}
-				{@const values = snapshots.map((s) => s[field])}
-				{@const min = Math.min(...values)}
-				{@const max = Math.max(...values)}
-				{@const range = max - min || 1}
-				{@const x = PADDING + (i / (snapshots.length - 1)) * (WIDTH - PADDING * 2)}
-				{@const y = PADDING + (HEIGHT - PADDING * 2) - ((snap[field] - min) / range) * (HEIGHT - PADDING * 2)}
+			{#each sparkline.coords as coord, i}
 				<circle
-					cx={x}
-					cy={y}
+					cx={coord.x}
+					cy={coord.y}
 					r={hoveredIndex === i ? 3 : 1.5}
 					fill={color}
 					opacity={hoveredIndex === i ? 1 : 0}
@@ -87,8 +83,8 @@
 				/>
 				<!-- Invisible larger hit target -->
 				<circle
-					cx={x}
-					cy={y}
+					cx={coord.x}
+					cy={coord.y}
 					r="5"
 					fill="transparent"
 					role="img"

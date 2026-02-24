@@ -82,7 +82,7 @@
 	const fillOpacity = $derived(color ? 1.0 : scanColor.opacity);
 
 	// Determine if node should be visible based on filters
-	const isVisible = $derived(() => {
+	const isVisible = $derived.by(() => {
 		if (scanLevel === 0) return false; // Unscanned systems not shown
 		if (showGates && !hasWarpGate) return false;
 		if (showInhabited && !isInhabited) return false;
@@ -94,7 +94,7 @@
 	const nodeSize = $derived(isPlayerLocation ? 8 : 4 + Math.min(scanLevel, 5));
 </script>
 
-{#if isVisible()}
+{#if isVisible}
 	<g
 		class="system-node"
 		class:selected={isSelected}

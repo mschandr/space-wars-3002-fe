@@ -69,12 +69,16 @@ export function recordPrices(
 
 		const snapshots = cache.history[id];
 
-		// Dedupe: skip if same hub recorded within the last minute
-		const last = snapshots[snapshots.length - 1];
-		if (last && last.hub_uuid === hubUuid) {
-			const lastMs = new Date(last.timestamp).getTime();
-			if (nowMs - lastMs < DEDUP_WINDOW_MS) continue;
+		// Dedupe: skip if same hub recorded within the last minute (search backwards)
+		let isDuplicate = false;
+		for (let i = snapshots.length - 1; i >= 0; i--) {
+			if (snapshots[i].hub_uuid === hubUuid) {
+				const lastMs = new Date(snapshots[i].timestamp).getTime();
+				isDuplicate = nowMs - lastMs < DEDUP_WINDOW_MS;
+				break;
+			}
 		}
+		if (isDuplicate) continue;
 
 		snapshots.push({
 			hub_uuid: hubUuid,

@@ -883,7 +883,7 @@ function createPlayerState() {
 				uuid: data.new_location.uuid,
 				name: data.new_location.name,
 				type: data.new_location.type,
-				position: { x: 0, y: 0 } // Position refreshed by loadLocationDetails
+				position: { x: data.new_location.x, y: data.new_location.y }
 			};
 		}
 
@@ -902,7 +902,7 @@ function createPlayerState() {
 		invalidateKnowledgeMap();
 
 		// Refresh ship (fuel was consumed) and location details from server
-		await loadMyShip();
+		await Promise.all([loadMyShip(), loadLocationDetails()]);
 
 		// Ensure minimum display time for the warp animation
 		const elapsed = Date.now() - startTime;
@@ -1089,6 +1089,7 @@ function createPlayerState() {
 		state.isLoading = false;
 		state.isTraveling = false;
 		state.travelDestination = null;
+		state.travelMode = null;
 		state.travelStatus = null;
 		state.knowledgeMap = null;
 		state.knowledgeMapStale = false;

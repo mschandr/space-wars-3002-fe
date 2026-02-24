@@ -26,7 +26,7 @@
 		bust: { bg: 'rgba(59, 130, 246, 0.25)', text: '#93c5fd' }
 	};
 
-	const eventBadgeText = $derived(() => {
+	const eventBadgeText = $derived.by(() => {
 		if (!activeEvent) return '';
 		const pct = activeEvent.price_change_percent
 			?? (activeEvent.price_multiplier - 1) * 100;
@@ -41,18 +41,16 @@
 	let isSelling = $state(false);
 	let error = $state<string | null>(null);
 
-	const maxBuyQuantity = $derived(() => {
-		const affordableQuantity = Math.floor(playerCredits / item.sell_price);
-		const fitQuantity = cargoSpace;
-		const availableQuantity = item.quantity;
-		return Math.min(affordableQuantity, fitQuantity, availableQuantity);
+	const maxBuyQuantity = $derived.by(() => {
+		const affordableQuantity = item.sell_price > 0 ? Math.floor(playerCredits / item.sell_price) : 0;
+		return Math.min(affordableQuantity, cargoSpace, item.quantity);
 	});
 
 	const maxSellQuantity = $derived(cargoItem?.quantity ?? 0);
 
 	const canBuy = $derived(
 		buyQuantity > 0 &&
-			buyQuantity <= maxBuyQuantity() &&
+			buyQuantity <= maxBuyQuantity &&
 			playerCredits >= item.sell_price * buyQuantity &&
 			cargoSpace >= buyQuantity
 	);
@@ -103,7 +101,7 @@
 	}
 
 	function setMaxBuy() {
-		buyQuantity = maxBuyQuantity();
+		buyQuantity = maxBuyQuantity;
 	}
 
 	function setMaxSell() {
@@ -124,7 +122,7 @@
 					class="event-badge"
 					style="background: {badgeColor.bg}; color: {badgeColor.text};"
 				>
-					{eventBadgeText()}
+					{eventBadgeText}
 				</span>
 			{/if}
 		</div>
@@ -167,15 +165,15 @@
 					type="number"
 					bind:value={buyQuantity}
 					min="1"
-					max={maxBuyQuantity()}
-					disabled={isBuying || maxBuyQuantity() === 0}
+					max={maxBuyQuantity}
+					disabled={isBuying || maxBuyQuantity === 0}
 					class="quantity-input"
 				/>
 				<button
 					type="button"
 					onclick={setMaxBuy}
 					class="max-btn"
-					disabled={maxBuyQuantity() === 0}
+					disabled={maxBuyQuantity === 0}
 					title="Set max quantity"
 				>
 					MAX

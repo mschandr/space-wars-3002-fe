@@ -270,10 +270,10 @@
 	}
 
 	function starSize(knowledgeLevel: number): number {
-		if (knowledgeLevel <= 1) return 4;
-		if (knowledgeLevel <= 2) return 5;
-		if (knowledgeLevel <= 3) return 6;
-		return 7;
+		if (knowledgeLevel <= 1) return 6;
+		if (knowledgeLevel <= 2) return 7;
+		if (knowledgeLevel <= 3) return 9;
+		return 11;
 	}
 
 	function fogFill(fog: SectorViewEntry['fog']): string {
@@ -371,6 +371,7 @@
 
 	{#if viewMode === 'detail' && focusedSector}
 		<!-- ===== DETAIL VIEW: Stars in a single sector ===== -->
+		<div class="detail-backdrop">
 		<svg
 			viewBox="0 0 {detailW} {detailH}"
 			class="sector-map-svg detail-svg"
@@ -378,12 +379,41 @@
 			aria-label="Sector detail: {focusedSector.name}"
 		>
 			<defs>
-				<!-- Background gradient for depth -->
-				<radialGradient id="space-bg" cx="50%" cy="50%" r="60%">
-					<stop offset="0%" stop-color="#0c1222" />
-					<stop offset="100%" stop-color="#060810" />
+				<!-- Semi-transparent dark overlay with vignette — nebula bleeds through from CSS bg -->
+				<radialGradient id="space-overlay" cx="50%" cy="50%" r="65%">
+					<stop offset="0%" stop-color="#0c1222" stop-opacity="0.55" />
+					<stop offset="70%" stop-color="#080c18" stop-opacity="0.7" />
+					<stop offset="100%" stop-color="#040608" stop-opacity="0.85" />
 				</radialGradient>
-				<!-- Selected star glow -->
+
+				<!-- Background star speckle pattern for depth -->
+				<pattern id="bg-stars" width="120" height="100" patternUnits="userSpaceOnUse">
+					<circle cx="8" cy="12" r="0.3" fill="#ffffff" opacity="0.12" />
+					<circle cx="34" cy="5" r="0.5" fill="#e0e8ff" opacity="0.18" />
+					<circle cx="55" cy="28" r="0.3" fill="#ffffff" opacity="0.1" />
+					<circle cx="78" cy="15" r="0.6" fill="#c8d4f0" opacity="0.22" />
+					<circle cx="102" cy="8" r="0.4" fill="#ffffff" opacity="0.14" />
+					<circle cx="17" cy="44" r="0.7" fill="#e0e8ff" opacity="0.25" />
+					<circle cx="45" cy="52" r="0.3" fill="#ffffff" opacity="0.11" />
+					<circle cx="68" cy="40" r="0.4" fill="#c8d4f0" opacity="0.16" />
+					<circle cx="95" cy="55" r="0.5" fill="#ffffff" opacity="0.13" />
+					<circle cx="112" cy="42" r="0.3" fill="#e0e8ff" opacity="0.1" />
+					<circle cx="25" cy="72" r="0.4" fill="#ffffff" opacity="0.15" />
+					<circle cx="50" cy="80" r="0.6" fill="#c8d4f0" opacity="0.2" />
+					<circle cx="82" cy="68" r="0.3" fill="#ffffff" opacity="0.12" />
+					<circle cx="105" cy="85" r="0.5" fill="#e0e8ff" opacity="0.17" />
+					<circle cx="38" cy="93" r="0.4" fill="#ffffff" opacity="0.13" />
+				</pattern>
+
+				<!-- Ambient glow applied to every star -->
+				<filter id="star-soft-glow">
+					<feGaussianBlur stdDeviation="2" result="blur" />
+					<feMerge>
+						<feMergeNode in="blur" />
+						<feMergeNode in="SourceGraphic" />
+					</feMerge>
+				</filter>
+				<!-- Selected star glow (brighter) -->
 				<filter id="star-glow">
 					<feGaussianBlur stdDeviation="3" result="blur" />
 					<feMerge>
@@ -393,20 +423,23 @@
 				</filter>
 			</defs>
 
-			<!-- Background with gradient -->
-			<rect x="0" y="0" width={detailW} height={detailH} fill="url(#space-bg)" rx="6" />
+			<!-- Semi-transparent overlay — nebula image shows through from CSS background -->
+			<rect x="0" y="0" width={detailW} height={detailH} fill="url(#space-overlay)" rx="6" />
+
+			<!-- Background star speckle layer for distant starfield depth -->
+			<rect x={detailPad} y={plotTop} width={plotW} height={plotH} fill="url(#bg-stars)" />
 
 			<!-- Coordinate grid -->
 			{#each Array(11) as _, i}
 				{@const gx = detailPad + plotW * i / 10}
 				{@const gy = plotTop + plotH * i / 10}
-				<line x1={gx} y1={plotTop} x2={gx} y2={plotTop + plotH} stroke="#1a2540" stroke-width="0.5" opacity="0.6" />
-				<line x1={detailPad} y1={gy} x2={detailPad + plotW} y2={gy} stroke="#1a2540" stroke-width="0.5" opacity="0.6" />
+				<line x1={gx} y1={plotTop} x2={gx} y2={plotTop + plotH} stroke="#2a3a5a" stroke-width="0.5" opacity="0.3" />
+				<line x1={detailPad} y1={gy} x2={detailPad + plotW} y2={gy} stroke="#2a3a5a" stroke-width="0.5" opacity="0.3" />
 			{/each}
 
 			<!-- Plot area border with subtle glow -->
 			<rect x={detailPad} y={plotTop} width={plotW} height={plotH}
-				fill="none" stroke="#1e3a5f" stroke-width="1" rx="3" opacity="0.6" />
+				fill="none" stroke="#2a4a6f" stroke-width="1" rx="3" opacity="0.7" />
 
 			<!-- Sector title -->
 			<text x={detailW / 2} y="18" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600">
@@ -427,9 +460,9 @@
 					x1={lane.from.x} y1={lane.from.y}
 					x2={lane.to.x} y2={lane.to.y}
 					stroke={laneColor}
-					stroke-width="1.2"
+					stroke-width="1.5"
 					stroke-dasharray={lane.hasPirate ? '4 2' : 'none'}
-					opacity="0.35"
+					opacity="0.5"
 					pointer-events="none"
 				/>
 				{#if lane.exit}
@@ -475,11 +508,12 @@
 							pointer-events="none" filter="url(#star-glow)" />
 					{/if}
 
-					<!-- Star body — opacity modulated by freshness -->
+					<!-- Star body — opacity modulated by freshness, ambient glow for nebula visibility -->
 					<circle cx={star.x} cy={star.y} r={starSize(star.knowledgeLevel)}
 						fill={knowledgeStarColor(star.sys)}
-						opacity={Math.max(0.3, star.freshness)}
+						opacity={Math.max(0.4, star.freshness)}
 						pointer-events="none"
+						filter="url(#star-soft-glow)"
 					/>
 
 					<!-- Name label (show if name is known, e.g. via warp lane data) -->
@@ -513,7 +547,7 @@
 			<circle cx={detailPad + 176} cy={detailH - 17} r="4" fill="none" stroke="#ef4444" stroke-width="1.5" />
 			<text x={detailPad + 184} y={detailH - 14} fill="#718096" font-size="7">You</text>
 		</svg>
-
+		</div>
 
 	{:else}
 		<!-- ===== GRID VIEW: Sector overview with fog of war ===== -->
@@ -702,6 +736,16 @@
 
 	.detail-svg {
 		max-height: 580px;
+	}
+
+	.detail-backdrop {
+		width: 100%;
+		max-width: 760px;
+		border-radius: 6px;
+		overflow: hidden;
+		background-image: url('/nursery.jpg.webp');
+		background-size: cover;
+		background-position: center;
 	}
 
 	/* --- Zoom controls --- */

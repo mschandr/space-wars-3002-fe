@@ -39,6 +39,13 @@
 			<div class="jump-icon">
 				<!-- TODO(human): Crosshair/targeting reticle SVG for the manual jump interstitial -->
 				<svg viewBox="0 0 80 80" class="crosshair-svg">
+					<defs>
+						<radialGradient id="jumpCore" cx="50%" cy="50%" r="50%">
+							<stop offset="0%" stop-color="#f6ad55" stop-opacity="0.8" />
+							<stop offset="60%" stop-color="#dd6b20" stop-opacity="0.4" />
+							<stop offset="100%" stop-color="#dd6b20" stop-opacity="0" />
+						</radialGradient>
+					</defs>
 					<circle cx="40" cy="40" r="36" fill="none" stroke="#f6ad55" stroke-width="1" opacity="0.3" />
 					<circle cx="40" cy="40" r="22" fill="url(#jumpCore)" class="core-glow" />
 				</svg>

@@ -60,6 +60,7 @@
 	// Travel info for selected star
 	let fuelCostData = $state<FuelCostResponse | null>(null);
 	let fuelCostLoading = $state(false);
+	let fuelCostRequestId = 0;
 
 	// Fetch fuel cost when a star is selected (locked)
 	$effect(() => {
@@ -71,16 +72,20 @@
 			return;
 		}
 
+		const requestId = ++fuelCostRequestId;
 		fuelCostLoading = true;
 		api.travel.previewFuelCost(shipUuid, { poiUuid: star.uuid }).then((res) => {
+			if (requestId !== fuelCostRequestId) return; // stale response
 			if (res.success && res.data) {
 				fuelCostData = res.data;
 			} else {
 				fuelCostData = null;
 			}
 		}).catch(() => {
+			if (requestId !== fuelCostRequestId) return;
 			fuelCostData = null;
 		}).finally(() => {
+			if (requestId !== fuelCostRequestId) return;
 			fuelCostLoading = false;
 		});
 	});
@@ -127,12 +132,12 @@
 				dangerZones = kmResult.danger_zones;
 				sensorRange = kmResult.player.sensor_range_ly;
 
-				// Extract player position (BE may send system_uuid or poi_uuid)
-				const p = kmResult.player as Record<string, unknown>;
+				// Extract player position from typed response
+				const p = kmResult.player;
 				playerMapPos = {
-					x: p.x as number,
-					y: p.y as number,
-					systemUuid: (p.system_uuid ?? p.poi_uuid ?? '') as string
+					x: Number.isFinite(p.x) ? p.x : 0,
+					y: Number.isFinite(p.y) ? p.y : 0,
+					systemUuid: p.system_uuid ?? ''
 				};
 				galaxyBounds = {
 					width: kmResult.galaxy.width,

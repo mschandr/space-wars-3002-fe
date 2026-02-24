@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { playerState } from '$lib/stores/playerState.svelte';
 	import type { MarketEvent } from '$lib/api';
 	import { recordPrices, getHistory } from '$lib/priceHistory';
@@ -31,8 +32,16 @@
 		if (transactionErrorTimer) clearTimeout(transactionErrorTimer);
 	}
 
-	// Load data on mount
+	onDestroy(() => {
+		if (transactionErrorTimer) {
+			clearTimeout(transactionErrorTimer);
+			transactionErrorTimer = null;
+		}
+	});
+
+	// Load data on mount and when hubUuid changes
 	$effect(() => {
+		const _hub = hubUuid; // track hubUuid as dependency
 		loadTradingData();
 	});
 

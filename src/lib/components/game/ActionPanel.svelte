@@ -468,19 +468,24 @@
 		isPurchasing = true;
 		purchaseMessage = null;
 
-		const result = await playerState.purchaseShip(ship.uuid, shipyardHubUuid);
+		try {
+			const result = await playerState.purchaseShip(ship.uuid, shipyardHubUuid);
 
-		if (result) {
-			purchaseMessage = `Successfully purchased ${result.ship.name}! Credits remaining: ${result.remaining_credits.toLocaleString()}`;
-			namingShipUuid = result.ship.uuid;
-			newShipName = '';
-			namingMessage = null;
-			showNamingPrompt = true;
-		} else {
+			if (result) {
+				purchaseMessage = `Successfully purchased ${result.ship.name}! Credits remaining: ${result.remaining_credits.toLocaleString()}`;
+				namingShipUuid = result.ship.uuid;
+				newShipName = '';
+				namingMessage = null;
+				showNamingPrompt = true;
+			} else {
+				purchaseMessage = 'Failed to purchase ship. Please try again.';
+			}
+		} catch (err) {
 			purchaseMessage = 'Failed to purchase ship. Please try again.';
+			console.error(err);
+		} finally {
+			isPurchasing = false;
 		}
-
-		isPurchasing = false;
 	}
 
 	async function loadShipyard() {
@@ -529,20 +534,25 @@
 		isPurchasing = true;
 		purchaseMessage = null;
 
-		const result = await playerState.purchaseShip(item.ship.uuid, shipyardHubUuid);
+		try {
+			const result = await playerState.purchaseShip(item.ship.uuid, shipyardHubUuid);
 
-		if (result) {
-			purchaseMessage = `Successfully purchased ${result.ship.name}! Credits remaining: ${result.remaining_credits.toLocaleString()}`;
-			namingShipUuid = result.ship.uuid;
-			newShipName = '';
-			namingMessage = null;
-			showNamingPrompt = true;
-			await loadShipyard();
-		} else {
+			if (result) {
+				purchaseMessage = `Successfully purchased ${result.ship.name}! Credits remaining: ${result.remaining_credits.toLocaleString()}`;
+				namingShipUuid = result.ship.uuid;
+				newShipName = '';
+				namingMessage = null;
+				showNamingPrompt = true;
+				await loadShipyard();
+			} else {
+				purchaseMessage = 'Failed to purchase ship. Please try again.';
+			}
+		} catch (err) {
 			purchaseMessage = 'Failed to purchase ship. Please try again.';
+			console.error(err);
+		} finally {
+			isPurchasing = false;
 		}
-
-		isPurchasing = false;
 	}
 
 	async function handleChristenShip() {
