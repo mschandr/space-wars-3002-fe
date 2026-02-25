@@ -1,24 +1,38 @@
 <script lang="ts">
 	import PriceDisplay from './PriceDisplay.svelte';
-<<<<<<< Updated upstream
-	import type { HubInventoryItem, CargoItem } from '$lib/api';
-=======
 	import PriceSparkline from './PriceSparkline.svelte';
 	import PriceChart from './PriceChart.svelte';
 	import type { HubInventoryItem, CargoItem, MarketEvent } from '$lib/api';
 	import type { PriceSnapshot } from '$lib/priceHistory';
->>>>>>> Stashed changes
 
 	interface Props {
 		item: HubInventoryItem;
 		playerCredits: number;
 		cargoSpace: number;
 		cargoItem?: CargoItem;
+		activeEvent?: MarketEvent;
+		priceHistory?: PriceSnapshot[];
 		onBuy: (mineralUuid: string, quantity: number) => Promise<void>;
 		onSell: (mineralUuid: string, quantity: number) => Promise<void>;
+		onError?: (message: string) => void;
 	}
 
-	let { item, playerCredits, cargoSpace, cargoItem, onBuy, onSell }: Props = $props();
+	let { item, playerCredits, cargoSpace, cargoItem, activeEvent, priceHistory, onBuy, onSell, onError }: Props = $props();
+
+	const eventBadgeColors: Record<string, { bg: string; text: string }> = {
+		shortage: { bg: 'rgba(239, 68, 68, 0.25)', text: '#fca5a5' },
+		surplus: { bg: 'rgba(34, 197, 94, 0.25)', text: '#86efac' },
+		boom: { bg: 'rgba(245, 158, 11, 0.25)', text: '#fcd34d' },
+		bust: { bg: 'rgba(59, 130, 246, 0.25)', text: '#93c5fd' }
+	};
+
+	const eventBadgeText = $derived.by(() => {
+		if (!activeEvent) return '';
+		const pct = activeEvent.price_change_percent
+			?? (activeEvent.price_multiplier - 1) * 100;
+		const sign = pct >= 0 ? '+' : '';
+		return `${activeEvent.event_type.toUpperCase()} ${sign}${pct.toFixed(0)}%`;
+	});
 
 	let showChart = $state(false);
 	let buyQuantity = $state(1);
@@ -27,18 +41,16 @@
 	let isSelling = $state(false);
 	let error = $state<string | null>(null);
 
-	const maxBuyQuantity = $derived(() => {
-		const affordableQuantity = Math.floor(playerCredits / item.sell_price);
-		const fitQuantity = cargoSpace;
-		const availableQuantity = item.quantity;
-		return Math.min(affordableQuantity, fitQuantity, availableQuantity);
+	const maxBuyQuantity = $derived.by(() => {
+		const affordableQuantity = item.sell_price > 0 ? Math.floor(playerCredits / item.sell_price) : 0;
+		return Math.min(affordableQuantity, cargoSpace, item.quantity);
 	});
 
 	const maxSellQuantity = $derived(cargoItem?.quantity ?? 0);
 
 	const canBuy = $derived(
 		buyQuantity > 0 &&
-			buyQuantity <= maxBuyQuantity() &&
+			buyQuantity <= maxBuyQuantity &&
 			playerCredits >= item.sell_price * buyQuantity &&
 			cargoSpace >= buyQuantity
 	);
@@ -64,7 +76,9 @@
 			await onBuy(item.mineral.uuid, buyQuantity);
 			buyQuantity = 1;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Purchase failed';
+			const msg = err instanceof Error ? err.message : 'Purchase failed';
+			error = msg;
+			onError?.(msg);
 		} finally {
 			isBuying = false;
 		}
@@ -78,14 +92,16 @@
 			await onSell(item.mineral.uuid, sellQuantity);
 			sellQuantity = 1;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Sale failed';
+			const msg = err instanceof Error ? err.message : 'Sale failed';
+			error = msg;
+			onError?.(msg);
 		} finally {
 			isSelling = false;
 		}
 	}
 
 	function setMaxBuy() {
-		buyQuantity = maxBuyQuantity();
+		buyQuantity = maxBuyQuantity;
 	}
 
 	function setMaxSell() {
@@ -93,17 +109,22 @@
 	}
 </script>
 
-<<<<<<< Updated upstream
-<div class="mineral-row">
-=======
-<div class="mineral-row" class:event-active={activeEvent} data-tutorial="mineral-row-{item.mineral.name.toLowerCase().replace(/\s+/g, '-')}">
->>>>>>> Stashed changes
+<div class="mineral-row" class:event-active={activeEvent}>
 	<div class="mineral-info">
 		<div class="mineral-header">
 			<span class="mineral-name">{item.mineral.name}</span>
 			<span class="rarity-badge {rarityColors[item.mineral.rarity] || 'rarity-common'}">
 				{item.mineral.rarity.replace('_', ' ')}
 			</span>
+			{#if activeEvent}
+				{@const badgeColor = eventBadgeColors[activeEvent.event_type] ?? eventBadgeColors.shortage}
+				<span
+					class="event-badge"
+					style="background: {badgeColor.bg}; color: {badgeColor.text};"
+				>
+					{eventBadgeText}
+				</span>
+			{/if}
 		</div>
 		<div class="mineral-stock">
 			<span class="stock-label">Stock:</span>
@@ -115,17 +136,11 @@
 		<div class="price-row">
 			<span class="price-label">Buy:</span>
 			<PriceDisplay price={item.buy_price} basePrice={item.mineral.base_price} showIndicator />
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 		</div>
 		<div class="price-row">
 			<span class="price-label">Sell:</span>
 			<PriceDisplay price={item.sell_price} basePrice={item.mineral.base_price} showIndicator />
 		</div>
-<<<<<<< Updated upstream
-=======
 		{#if priceHistory && priceHistory.length >= 2}
 			<div class="sparkline-row">
 				<span class="sparkline-label">Buy:</span>
@@ -141,7 +156,6 @@
 				</button>
 			</div>
 		{/if}
->>>>>>> Stashed changes
 	</div>
 
 	<div class="action-section">
@@ -151,15 +165,15 @@
 					type="number"
 					bind:value={buyQuantity}
 					min="1"
-					max={maxBuyQuantity()}
-					disabled={isBuying || maxBuyQuantity() === 0}
+					max={maxBuyQuantity}
+					disabled={isBuying || maxBuyQuantity === 0}
 					class="quantity-input"
 				/>
 				<button
 					type="button"
 					onclick={setMaxBuy}
 					class="max-btn"
-					disabled={maxBuyQuantity() === 0}
+					disabled={maxBuyQuantity === 0}
 					title="Set max quantity"
 				>
 					MAX
@@ -233,6 +247,27 @@
 		grid-template-columns: 1fr auto auto;
 		gap: 1rem;
 		align-items: start;
+		transition: border-color 0.3s, box-shadow 0.3s;
+	}
+
+	.mineral-row.event-active {
+		border-color: #f59e0b;
+		box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+		animation: event-pulse 3s ease-in-out infinite;
+	}
+
+	@keyframes event-pulse {
+		0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.15); }
+		50% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.3); }
+	}
+
+	.event-badge {
+		font-size: 0.55rem;
+		padding: 0.1rem 0.35rem;
+		border-radius: 3px;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		white-space: nowrap;
 	}
 
 	.mineral-info {
@@ -320,8 +355,6 @@
 		width: 30px;
 	}
 
-<<<<<<< Updated upstream
-=======
 	.sparkline-row {
 		display: flex;
 		align-items: center;
@@ -358,7 +391,6 @@
 		border-color: #4a5568;
 	}
 
->>>>>>> Stashed changes
 	.action-section {
 		display: flex;
 		flex-direction: column;

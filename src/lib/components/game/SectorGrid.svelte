@@ -14,15 +14,16 @@
 		gridSize?: number;
 		currentSystemUuid?: string;
 		onSectorClick?: (x: number, y: number) => void;
+		onNavigateToMap?: () => void;
 	}
 
-	let { sector, gridSize = 5, currentSystemUuid, onSectorClick }: Props = $props();
+	let { sector, gridSize = 5, currentSystemUuid, onSectorClick, onNavigateToMap }: Props = $props();
 
 	// Expanded state - shows the star map when true
 	let isExpanded = $state(false);
 
 	// Ensure gridSize is valid (positive integer)
-	const safeGridSize = $derived(() => {
+	const safeGridSize = $derived.by(() => {
 		const size = Math.round(gridSize);
 		if (!Number.isFinite(size) || size < 1) return 5;
 		if (size > 20) return 20; // Cap at 20 for performance
@@ -35,7 +36,7 @@
 
 	// Generate grid cells (Y-axis is inverted so Y=0 appears at bottom)
 	const cells = $derived.by(() => {
-		const size = safeGridSize();
+		const size = safeGridSize;
 		const result: { x: number; y: number; isCurrent: boolean }[] = [];
 		// Start from highest Y value so it renders at the top, Y=0 at the bottom
 		for (let row = size - 1; row >= 0; row--) {
@@ -51,9 +52,12 @@
 	});
 
 	function handleCellClick(cell: { x: number; y: number; isCurrent: boolean }) {
-		// Only allow clicking on the current sector - expands to star map
 		if (cell.isCurrent) {
-			isExpanded = true;
+			if (onNavigateToMap) {
+				onNavigateToMap();
+			} else {
+				isExpanded = true;
+			}
 		}
 	}
 
@@ -77,7 +81,7 @@
 		</div>
 
 		<div class="grid-wrapper">
-			<div class="sector-grid" style="--grid-size: {safeGridSize()}">
+			<div class="sector-grid" style="--grid-size: {safeGridSize}">
 				{#each cells as cell (cell.x + '-' + cell.y)}
 					<div
 						class="grid-cell"
@@ -100,16 +104,16 @@
 
 			<!-- Axis labels -->
 			<div class="axis-labels x-axis">
-				{#each Array(safeGridSize())
+				{#each Array(safeGridSize)
 					.fill(0)
 					.map((_, i) => i) as idx (idx)}
 					<span class="axis-label">{idx}</span>
 				{/each}
 			</div>
 			<div class="axis-labels y-axis">
-				{#each Array(safeGridSize())
+				{#each Array(safeGridSize)
 					.fill(0)
-					.map((_, i) => safeGridSize() - 1 - i) as idx (idx)}
+					.map((_, i) => safeGridSize - 1 - i) as idx (idx)}
 					<span class="axis-label">{idx}</span>
 				{/each}
 			</div>
@@ -131,7 +135,7 @@
 		{/if}
 
 		<div class="expand-hint">
-			<span class="hint-text">Click marker to view star map</span>
+			<span class="hint-text">Click marker to open star map</span>
 		</div>
 	</div>
 {/if}

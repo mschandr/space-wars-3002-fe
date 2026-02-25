@@ -1,18 +1,17 @@
 <script lang="ts">
 	import { playerState } from '$lib/stores/playerState.svelte';
-	import { api, type ShipTemplate, type ShipCatalogItem, type LocalBodiesResponse, type OrbitalBody } from '$lib/api';
+	import { api, type ShipyardItem, type ShipCatalogItem, type LocalBodiesResponse, type OrbitalBody, type SalvageYardResponse, type SalvageInventoryItem, type MarketEventType } from '$lib/api';
 	import TradingPanel from './TradingPanel.svelte';
 	import WarpLoader from './WarpLoader.svelte';
-<<<<<<< Updated upstream
-=======
 	import MarketEventsPanel from './MarketEventsPanel.svelte';
 	import { tutorialState } from '$lib/stores/tutorialState.svelte';
->>>>>>> Stashed changes
 
 	// Menu item types matching SystemMenu
 	type MenuItemId =
 		| 'planets'
 		| 'warp'
+		| 'manual_jump'
+		| 'market_news'
 		| 'trading_hub'
 		| 'shipyard'
 		| 'salvage'
@@ -35,7 +34,8 @@
 
 	// Shipyard state (for trading hub)
 	let isLoadingShipyard = $state(false);
-	let availableShips = $state<ShipTemplate[]>([]);
+	let availableShips = $state<ShipyardItem[]>([]);
+	let shipyardHubUuid = $state<string | null>(null);
 	let shipyardError = $state<string | null>(null);
 
 	// Local bodies state (for local planets)
@@ -60,16 +60,69 @@
 	let shipCatalog = $state<ShipCatalogItem[]>([]);
 	let catalogError = $state<string | null>(null);
 
+	// Salvage yard inventory state
+	let isLoadingSalvage = $state(false);
+	let salvageData = $state<SalvageYardResponse | null>(null);
+	let salvageError = $state<string | null>(null);
+
 	// Purchase state
 	let isPurchasing = $state(false);
 	let purchaseMessage = $state<string | null>(null);
 
+	// Ship detail modal state
+	let inspectedShip = $state<ShipyardItem | null>(null);
+
+	// Warp gate sort state
+	type GateSortKey = 'distance' | 'name';
+	type GateSortDir = 'asc' | 'desc';
+	let gateSortKey = $state<GateSortKey>('distance');
+	let gateSortDir = $state<GateSortDir>('asc');
+
+	function toggleGateSort(key: GateSortKey) {
+		if (gateSortKey === key) {
+			gateSortDir = gateSortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			gateSortKey = key;
+			gateSortDir = 'asc';
+		}
+	}
+
+	// Post-purchase naming state
+	let showNamingPrompt = $state(false);
+	let namingShipUuid = $state<string | null>(null);
+	let newShipName = $state('');
+	let isNaming = $state(false);
+	let namingMessage = $state<string | null>(null);
+
+	function formatPrice(value: number | string): string {
+		const num = typeof value === 'string' ? parseFloat(value) : value;
+		if (isNaN(num)) return '0.00';
+		return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	// Rarity → star rating system
+	const RARITY_STARS: Record<string, { stars: number; max: number; color: string; label: string }> = {
+		common:   { stars: 1, max: 5, color: '#a0aec0', label: 'Common' },
+		uncommon: { stars: 2, max: 5, color: '#68d391', label: 'Uncommon' },
+		rare:     { stars: 3, max: 5, color: '#63b3ed', label: 'Rare' },
+		epic:     { stars: 4, max: 5, color: '#b794f4', label: 'Epic' },
+		unique:   { stars: 5, max: 5, color: '#f6ad55', label: 'Unique' },
+		exotic:   { stars: 6, max: 5, color: '#ffd700', label: 'Exotic' }
+	};
+
+	function getRarityInfo(rarity?: string) {
+		if (!rarity) return RARITY_STARS.common;
+		return RARITY_STARS[rarity.toLowerCase()] ?? RARITY_STARS.common;
+	}
+
 	// Travel confirmation state
 	interface TravelDestination {
-		uuid: string;
+		gateUuid: string;
+		destinationUuid: string;
 		name: string;
-		type: 'gate' | 'system';
+		type: 'gate';
 		distance?: number;
+		fuelCost?: number;
 	}
 	let pendingTravel = $state<TravelDestination | null>(null);
 
@@ -83,8 +136,8 @@
 		const destination = pendingTravel;
 		pendingTravel = null;
 
-		// Call the travel API through playerState
-		const result = await playerState.travel(destination.uuid, destination.name);
+		// Call the gate travel API through playerState
+		const result = await playerState.travelViaGate(destination.gateUuid, destination.name);
 
 		if (result) {
 			// Clear local bodies cache since we've moved to a new system
@@ -114,10 +167,12 @@
 	$effect(() => {
 		if (activeItem === 'planets' && !localBodies && !isLoadingBodies) {
 			loadLocalBodies();
-		} else if (activeItem === 'salvage' && shipCatalog.length === 0 && !isLoadingCatalog) {
-			loadShipCatalog();
+		} else if (activeItem === 'salvage' && !salvageData && !isLoadingSalvage) {
+			loadSalvageYard();
 		} else if (activeItem === 'shipyard' && availableShips.length === 0 && !isLoadingShipyard) {
 			loadShipyard();
+		} else if (activeItem === 'market_news' && !playerState.isLoadingMarketEvents) {
+			playerState.loadGalaxyMarketEvents();
 		}
 	});
 
@@ -130,6 +185,7 @@
 
 	const panelTitles: Record<string, string> = {
 		planets: 'Star System',
+		market_news: 'Galaxy Market News',
 		trading_hub: 'Trading Hub',
 		shipyard: 'Shipyard',
 		salvage: 'Salvage Yard',
@@ -150,6 +206,12 @@
 		'commerce hub': { icon: '\u{1F4B0}', label: 'Trading Hub' },
 		trading_post: { icon: '\u{1F4B0}', label: 'Trading Hub' },
 		'trading post': { icon: '\u{1F4B0}', label: 'Trading Hub' },
+		mineral_trading: { icon: '\u{1F4B0}', label: 'Trading Hub' },
+		'mineral trading': { icon: '\u{1F4B0}', label: 'Trading Hub' },
+		mineral_trading_post: { icon: '\u{1F4B0}', label: 'Trading Hub' },
+		'mineral trading post': { icon: '\u{1F4B0}', label: 'Trading Hub' },
+		trading_station: { icon: '\u{1F4B0}', label: 'Trading Hub' },
+		'trading station': { icon: '\u{1F4B0}', label: 'Trading Hub' },
 
 		// Salvage Yard
 		salvage_yard: { icon: '\u{1F527}', label: 'Salvage Yard' },
@@ -332,6 +394,63 @@
 		}
 	}
 
+	// Load salvage yard inventory
+	async function loadSalvageYard() {
+		console.log('[ActionPanel] loadSalvageYard called, playerUuid:', playerState.playerUuid);
+		if (!playerState.playerUuid) {
+			salvageError = 'Player not initialized';
+			return;
+		}
+
+		isLoadingSalvage = true;
+		salvageError = null;
+
+		try {
+			console.log('[ActionPanel] Loading salvage yard inventory');
+			const response = await api.salvageYard.getInventory(playerState.playerUuid);
+			console.log('[ActionPanel] Salvage yard response:', JSON.stringify(response).slice(0, 500));
+
+			if (response.success && response.data) {
+				salvageData = response.data;
+				console.log('[ActionPanel] Salvage yard loaded:', response.data.hub.name, 'weapons:', response.data.inventory?.weapons?.length, 'utilities:', response.data.inventory?.utilities?.length);
+			} else {
+				salvageError = response.error?.message ?? 'Failed to load salvage yard';
+				console.log('[ActionPanel] Salvage yard error:', salvageError);
+			}
+		} catch (err) {
+			salvageError = 'Failed to connect to salvage yard';
+			console.error('[ActionPanel] Salvage yard exception:', err);
+		} finally {
+			isLoadingSalvage = false;
+		}
+	}
+
+	async function handlePurchaseSalvage(item: SalvageInventoryItem) {
+		if (isPurchasing || !playerState.playerUuid) return;
+
+		isPurchasing = true;
+		purchaseMessage = null;
+
+		try {
+			// Default to slot 1; API will error if occupied
+			const response = await api.salvageYard.purchase(playerState.playerUuid, item.id, 1);
+
+			if (response.success) {
+				purchaseMessage = `Successfully installed ${item.component.name}!`;
+				// Refresh salvage inventory and player state
+				salvageData = null;
+				loadSalvageYard();
+				playerState.loadMyShip();
+			} else {
+				purchaseMessage = response.error?.message ?? 'Purchase failed';
+			}
+		} catch {
+			purchaseMessage = 'Failed to complete purchase';
+		} finally {
+			isPurchasing = false;
+		}
+	}
+
 	// Purchase ship from catalog
 	async function handlePurchaseCatalogShip(ship: ShipCatalogItem) {
 		if (isPurchasing) return;
@@ -341,18 +460,32 @@
 			return;
 		}
 
+		if (!shipyardHubUuid) {
+			purchaseMessage = 'No shipyard hub available for purchase.';
+			return;
+		}
+
 		isPurchasing = true;
 		purchaseMessage = null;
 
-		const result = await playerState.purchaseShip(ship.uuid);
+		try {
+			const result = await playerState.purchaseShip(ship.uuid, shipyardHubUuid);
 
-		if (result) {
-			purchaseMessage = `Successfully purchased ${result.purchased_ship.name}! Credits remaining: ${result.credits_remaining.toLocaleString()}`;
-		} else {
+			if (result) {
+				purchaseMessage = `Successfully purchased ${result.ship.name}! Credits remaining: ${result.remaining_credits.toLocaleString()}`;
+				namingShipUuid = result.ship.uuid;
+				newShipName = '';
+				namingMessage = null;
+				showNamingPrompt = true;
+			} else {
+				purchaseMessage = 'Failed to purchase ship. Please try again.';
+			}
+		} catch (err) {
 			purchaseMessage = 'Failed to purchase ship. Please try again.';
+			console.error(err);
+		} finally {
+			isPurchasing = false;
 		}
-
-		isPurchasing = false;
 	}
 
 	async function loadShipyard() {
@@ -360,43 +493,26 @@
 		shipyardError = null;
 		availableShips = [];
 
-		// Get the trading hub UUID from location details
-		const tradingHub = locationDetails?.has?.trading_hub;
+		// Get hub UUID from facilities (preferred) or trading hub data
+		const hubUuid = tradingHub?.uuid;
 
-		if (!tradingHub?.uuid) {
-			// No trading hub in location details - try using the POI UUID as fallback
-			// Some APIs might use the location UUID directly
-			const fallbackUuid = playerState.currentSystem?.uuid;
-
-			if (!fallbackUuid) {
-				shipyardError = 'No trading hub found at this location';
-				isLoadingShipyard = false;
-				return;
-			}
-
-			console.log('[ActionPanel] No trading hub UUID, trying POI UUID:', fallbackUuid);
-
-			try {
-				const response = await api.tradingHubs.getShipyard(fallbackUuid);
-				if (response.success && response.data) {
-					availableShips = response.data.available_ships;
-				} else {
-					shipyardError = response.error?.message ?? 'No shipyard available at this location';
-				}
-			} catch {
-				shipyardError = 'Failed to connect to shipyard';
-			} finally {
-				isLoadingShipyard = false;
-			}
+		if (!hubUuid) {
+			shipyardError = 'No trading hub found at this location';
+			isLoadingShipyard = false;
 			return;
 		}
 
-		console.log('[ActionPanel] Loading shipyard for trading hub:', tradingHub.uuid);
+		console.log('[ActionPanel] Loading shipyard for hub:', hubUuid);
 
 		try {
-			const response = await api.tradingHubs.getShipyard(tradingHub.uuid);
+			const response = await api.tradingHubs.getShipyard(hubUuid);
 			if (response.success && response.data) {
-				availableShips = response.data.available_ships;
+				if (!response.data.has_shipyard) {
+					shipyardError = 'No shipyard available at this trading hub';
+				} else {
+					availableShips = response.data.available_ships;
+					shipyardHubUuid = hubUuid;
+				}
 			} else {
 				shipyardError = response.error?.message ?? 'Failed to load shipyard';
 			}
@@ -407,31 +523,38 @@
 		}
 	}
 
-	async function handlePurchaseShip(ship: ShipTemplate) {
-		if (isPurchasing) return;
+	async function handlePurchaseShip(item: ShipyardItem) {
+		if (isPurchasing || !shipyardHubUuid) return;
 
-		if (playerState.credits < ship.price) {
-			purchaseMessage = `Insufficient credits. You need ${ship.price.toLocaleString()} credits.`;
+		if (playerState.credits < item.current_price) {
+			purchaseMessage = `Insufficient credits. You need ${item.current_price.toLocaleString()} credits.`;
 			return;
 		}
 
 		isPurchasing = true;
 		purchaseMessage = null;
 
-		const result = await playerState.purchaseShip(ship.uuid);
+		try {
+			const result = await playerState.purchaseShip(item.ship.uuid, shipyardHubUuid);
 
-		if (result) {
-			purchaseMessage = `Successfully purchased ${result.purchased_ship.name}! Credits remaining: ${result.credits_remaining.toLocaleString()}`;
-			await loadShipyard();
-		} else {
+			if (result) {
+				purchaseMessage = `Successfully purchased ${result.ship.name}! Credits remaining: ${result.remaining_credits.toLocaleString()}`;
+				namingShipUuid = result.ship.uuid;
+				newShipName = '';
+				namingMessage = null;
+				showNamingPrompt = true;
+				await loadShipyard();
+			} else {
+				purchaseMessage = 'Failed to purchase ship. Please try again.';
+			}
+		} catch (err) {
 			purchaseMessage = 'Failed to purchase ship. Please try again.';
+			console.error(err);
+		} finally {
+			isPurchasing = false;
 		}
-
-		isPurchasing = false;
 	}
 
-<<<<<<< Updated upstream
-=======
 	async function handleChristenShip() {
 		if (!namingShipUuid || !newShipName.trim() || isNaming) return;
 
@@ -442,7 +565,6 @@
 
 		if (result) {
 			namingMessage = `Ship christened: ${result.ship.name}!`;
-			tutorialState.completeAction('take_free_ship');
 			setTimeout(() => {
 				showNamingPrompt = false;
 				namingMessage = null;
@@ -462,7 +584,6 @@
 		tutorialState.completeAction('take_free_ship');
 	}
 
->>>>>>> Stashed changes
 	function handleServiceClick(service: string) {
 		if (service === 'ship_shop') {
 			loadShipyard();
@@ -484,8 +605,23 @@
 		}
 	});
 
-	// Get trading hub info
-	const tradingHub = $derived(locationDetails?.has?.trading_hub);
+	// Derive facility UUIDs from facilities endpoint (primary) or locationDetails (fallback)
+	const facilities = $derived(playerState.facilities);
+	const tradingHub = $derived.by(() => {
+		const hubs = facilities?.facilities?.trading_hubs;
+		if (hubs && hubs.length > 0) return hubs[0];
+		return locationDetails?.has?.trading_hub ?? null;
+	});
+	const shipyardFacility = $derived.by(() => {
+		const yards = facilities?.facilities?.shipyards;
+		if (yards && yards.length > 0) return yards[0];
+		return null;
+	});
+	const salvageYardFacility = $derived.by(() => {
+		const yards = facilities?.facilities?.salvage_yards;
+		if (yards && yards.length > 0) return yards[0];
+		return null;
+	});
 </script>
 
 <div class="action-panel" data-tutorial="action-panel">
@@ -770,6 +906,14 @@
 					<p class="no-features">Click to load local bodies.</p>
 					<button class="action-btn" onclick={loadLocalBodies}>Load Bodies</button>
 				{/if}
+			{:else if activeItem === 'market_news'}
+				<!-- Galaxy Market News Panel -->
+				<MarketEventsPanel
+					mode="galaxy"
+					events={playerState.galaxyMarketEvents}
+					isLoading={playerState.isLoadingMarketEvents}
+					onFilterChange={(filters) => playerState.loadGalaxyMarketEvents(filters)}
+				/>
 			{:else if activeItem === 'trading_hub'}
 				<!-- Trading Hub Panel -->
 				{#if tradingHub}
@@ -785,7 +929,7 @@
 					<div class="loading">Loading available ships...</div>
 				{:else if availableShips.length > 0}
 					<div class="credits-display">
-						Your Credits: <span class="credits-value">{playerState.credits.toLocaleString()}</span>
+						Your Credits: <span class="credits-value">{formatPrice(playerState.credits)}</span>
 					</div>
 
 					{#if purchaseMessage}
@@ -797,37 +941,165 @@
 						</div>
 					{/if}
 
-					<div class="ships-list">
-						{#each availableShips as ship (ship.uuid)}
-							<div class="ship-card">
-								<div class="ship-header">
-									<span class="ship-name">{ship.name}</span>
-									<span class="ship-class">{ship.class}</span>
-								</div>
-								<p class="ship-desc">{ship.description}</p>
-								<div class="ship-stats">
-									<span>Cargo: {ship.base_cargo}</span>
-									<span>Fuel: {ship.base_fuel}</span>
-									<span>Hull: {ship.base_hull}</span>
-									<span>Weapons: {ship.base_weapons}</span>
-								</div>
-								<div class="ship-footer">
-									<span class="ship-price">{ship.price.toLocaleString()} credits</span>
-									<button
-										class="buy-btn"
-										disabled={isPurchasing || playerState.credits < ship.price}
-										onclick={() => handlePurchaseShip(ship)}
-									>
-										{#if isPurchasing}
-											Purchasing...
-										{:else if playerState.credits < ship.price}
-											Insufficient Credits
-										{:else}
-											Purchase
-										{/if}
-									</button>
-								</div>
+					{#if showNamingPrompt}
+						<div class="naming-prompt">
+							<div class="naming-header">
+								<span class="naming-icon">&#9998;</span>
+								<span>Christen Your Ship</span>
 							</div>
+							<p class="naming-hint">First naming is free!</p>
+							{#if namingMessage}
+								<div class="naming-message" class:success={namingMessage.includes('christened')}>
+									{namingMessage}
+								</div>
+							{:else}
+								<div class="naming-controls">
+									<input
+										class="naming-input"
+										type="text"
+										placeholder="Enter ship name..."
+										bind:value={newShipName}
+										maxlength={100}
+										disabled={isNaming}
+										onkeydown={(e) => { if (e.key === 'Enter') handleChristenShip(); }}
+									/>
+									<div class="naming-buttons">
+										<button class="christen-btn" onclick={handleChristenShip} disabled={isNaming || !newShipName.trim()}>
+											{#if isNaming}Naming...{:else}Christen{/if}
+										</button>
+										<button class="skip-btn" onclick={skipNaming} disabled={isNaming}>Skip</button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					<div class="ships-list">
+						{#each availableShips as item (item.ship.uuid)}
+							{@const isStarterFreebie = item.current_price <= 0 && playerState.ships.length === 0}
+							{@const isStarterOwned = item.current_price <= 0 && playerState.ships.length > 0}
+							{@const displayPrice = isStarterOwned ? 500 : item.current_price}
+							{@const canAfford = playerState.credits >= displayPrice}
+							{@const meetsLevel = !item.ship.requirements || playerState.level >= item.ship.requirements.level}
+							{@const shipRarity = getRarityInfo(item.ship.rarity)}
+							{#if isStarterFreebie}
+								<!-- Desperate shipyard owner pitch for shipless players -->
+								<div class="ship-card starter-pitch">
+									<div class="pitch-dialogue">
+										<span class="pitch-speaker">Shipyard Owner:</span>
+										<p class="pitch-text">
+											{#if item.owner_commentary}
+												"{item.owner_commentary}"
+											{:else}
+												"Look, I'm gonna level with you. This thing's been sitting on my lot for months.
+												Nobody wants it. The nav computer glitches, the hull rattles above half-throttle,
+												and I'm pretty sure something is living in the cargo hold.
+												But hey — you need a ship, I need the dock space. She's yours. Free.
+												Just... get it out of here."
+											{/if}
+										</p>
+									</div>
+									<div class="ship-header">
+										<span class="ship-name">{item.ship.name}</span>
+										<span class="starter-tag">FREE</span>
+									</div>
+									<button class="ship-class-btn" onclick={() => { inspectedShip = item; }}>
+										{item.ship.class_info?.label ?? item.ship.class}
+										{#if item.ship.class_info?.role}
+											<span class="class-role">({item.ship.class_info.role})</span>
+										{/if}
+										<span class="inspect-hint">View Details &#x276F;</span>
+									</button>
+									{#if item.ship.stats}
+										<div class="ship-stats-brief">
+											<span title="Hull">&#x1F6E1; {item.ship.stats.hull_strength.toLocaleString()}</span>
+											<span title="Shields">&#x26A1; {item.ship.stats.shield_strength.toLocaleString()}</span>
+											<span title="Cargo">&#x1F4E6; {item.ship.stats.cargo_capacity.toLocaleString()}</span>
+											<span title="Speed">&#x1F680; {item.ship.stats.speed}</span>
+										</div>
+									{/if}
+									<div class="ship-footer">
+										<span class="ship-price affordable">FREE — Just take it. Please.</span>
+										<button
+											class="buy-btn"
+											disabled={isPurchasing || item.quantity <= 0}
+											onclick={() => handlePurchaseShip(item)}
+										>
+											{#if isPurchasing}
+												Acquiring...
+											{:else}
+												Take the Ship
+											{/if}
+										</button>
+									</div>
+								</div>
+							{:else}
+								<!-- Standard ship card -->
+								<div class="ship-card" class:unavailable={!canAfford || !meetsLevel}>
+									<div class="ship-header">
+										<span class="ship-name">{item.ship.name}</span>
+										<div class="rarity-stars" title="{shipRarity.label}">
+											{#each Array(Math.min(shipRarity.stars, 5)) as _}
+												<span class="r-star filled" style="color: {shipRarity.color}">{'\u2605'}</span>
+											{/each}
+											{#each Array(Math.max(0, 5 - shipRarity.stars)) as _}
+												<span class="r-star empty">{'\u2606'}</span>
+											{/each}
+											{#if shipRarity.stars > 5}
+												<span class="r-star overflow" style="color: {shipRarity.color}">+{'\u2605'}</span>
+											{/if}
+										</div>
+									</div>
+									<button class="ship-class-btn" onclick={() => { inspectedShip = item; }}>
+										{item.ship.class_info?.label ?? item.ship.class}
+										{#if item.ship.class_info?.role}
+											<span class="class-role">({item.ship.class_info.role})</span>
+										{/if}
+										<span class="inspect-hint">View Details &#x276F;</span>
+									</button>
+									{#if item.ship.stats}
+										<div class="ship-stats-brief">
+											<span title="Hull">&#x1F6E1; {item.ship.stats.hull_strength.toLocaleString()}</span>
+											<span title="Shields">&#x26A1; {item.ship.stats.shield_strength.toLocaleString()}</span>
+											<span title="Cargo">&#x1F4E6; {item.ship.stats.cargo_capacity.toLocaleString()}</span>
+											<span title="Speed">&#x1F680; {item.ship.stats.speed}</span>
+										</div>
+									{/if}
+									{#if item.owner_commentary}
+										<p class="merchant-commentary">"{item.owner_commentary}"</p>
+									{/if}
+									<div class="ship-footer">
+										<div class="ship-price-block">
+											<span class="ship-price" class:affordable={canAfford} class:expensive={!canAfford}>
+												{formatPrice(displayPrice)} credits
+												{#if isStarterOwned}
+													<span class="price-note">(yard fee)</span>
+												{/if}
+											</span>
+											<span class="ship-stock">Stock: {item.quantity.toLocaleString()}</span>
+										</div>
+										{#if !meetsLevel && item.ship.requirements}
+											<span class="level-req">Requires Lv.{item.ship.requirements.level}</span>
+										{:else}
+											<button
+												class="buy-btn"
+												disabled={isPurchasing || !canAfford || item.quantity <= 0}
+												onclick={() => handlePurchaseShip(item)}
+											>
+												{#if isPurchasing}
+													Purchasing...
+												{:else if item.quantity <= 0}
+													Out of Stock
+												{:else if !canAfford}
+													Can't Afford
+												{:else}
+													Purchase
+												{/if}
+											</button>
+										{/if}
+									</div>
+								</div>
+							{/if}
 						{/each}
 					</div>
 				{:else if shipyardError}
@@ -840,24 +1112,36 @@
 			{:else if activeItem === 'warp'}
 				<!-- Warp Gates Panel -->
 				{@const gateEntries = Object.entries(gates)}
+				{@const sortedGates = [...gateEntries].sort((a, b) => {
+					const dir = gateSortDir === 'asc' ? 1 : -1;
+					if (gateSortKey === 'distance') return (a[1].distance - b[1].distance) * dir;
+					return a[1].destination_name.localeCompare(b[1].destination_name) * dir;
+				})}
 				{#if isLoading}
 					<div class="loading">Loading warp gates...</div>
-				{:else if gateEntries.length > 0}
+				{:else if sortedGates.length > 0}
+					<div class="gate-sort-bar">
+						<span class="gate-sort-label">Sort</span>
+						<button class="gate-sort-btn" class:active={gateSortKey === 'distance'} onclick={() => toggleGateSort('distance')}>
+							Dist {#if gateSortKey === 'distance'}{gateSortDir === 'asc' ? '\u25B2' : '\u25BC'}{/if}
+						</button>
+						<button class="gate-sort-btn" class:active={gateSortKey === 'name'} onclick={() => toggleGateSort('name')}>
+							Name {#if gateSortKey === 'name'}{gateSortDir === 'asc' ? '\u25B2' : '\u25BC'}{/if}
+						</button>
+					</div>
 					<div class="warp-gates-list">
-<<<<<<< Updated upstream
-						{#each gateEntries as [gateUuid, gate] (gateUuid)}
-=======
 						{#each sortedGates as [gateUuid, gate], idx (gateUuid)}
->>>>>>> Stashed changes
 							<button
 								class="warp-gate-item"
 								data-tutorial={idx === 0 ? 'warp-gate-first' : undefined}
 								onclick={() =>
 									showTravelConfirmation({
-										uuid: gate.destination_uuid,
+										gateUuid: gateUuid,
+										destinationUuid: gate.destination_uuid,
 										name: gate.destination_name,
 										type: 'gate',
-										distance: gate.distance
+										distance: gate.distance,
+										fuelCost: gate.fuel_cost
 									})}
 							>
 								<!-- Stargate-style icon -->
@@ -920,15 +1204,17 @@
 					<p class="no-features">Location data not available.</p>
 				{/if}
 			{:else if activeItem === 'salvage'}
-				<!-- Salvage Yard / Ship Catalog Panel -->
-				{#if isLoadingCatalog}
-					<div class="loading">Loading ship catalog...</div>
-				{:else if catalogError}
-					<p class="error-message">{catalogError}</p>
-					<button class="retry-btn" onclick={loadShipCatalog}>Retry</button>
-				{:else if shipCatalog.length > 0}
+				<!-- Salvage Yard Panel -->
+				{#if isLoadingSalvage}
+					<div class="loading">Loading salvage yard...</div>
+				{:else if salvageError}
+					<p class="error-message">{salvageError}</p>
+					<button class="retry-btn" onclick={loadSalvageYard}>Retry</button>
+				{:else if salvageData}
+					{@const allItems = Object.values(salvageData.inventory).flat()}
 					<div class="credits-display">
-						Your Credits: <span class="credits-value">{playerState.credits.toLocaleString()}</span>
+						{salvageData.hub.name} ({salvageData.hub.tier})
+						<br />Your Credits: <span class="credits-value">{playerState.credits.toLocaleString()}</span>
 					</div>
 
 					{#if purchaseMessage}
@@ -937,60 +1223,91 @@
 						</div>
 					{/if}
 
-					<div class="ships-list">
-						{#each shipCatalog as ship (ship.uuid)}
-							{@const canAfford = playerState.credits >= ship.price}
-							<div class="ship-card" class:unavailable={!canAfford}>
-								<div class="ship-header">
-									<span class="ship-name">{ship.name}</span>
-									<span class="ship-class">{ship.class}</span>
-								</div>
-								{#if ship.description}
-									<p class="ship-desc">{ship.description}</p>
-								{/if}
-								<div class="ship-stats">
-									<span>Hull: {ship.base_hull}</span>
-									{#if ship.base_shield}
-										<span>Shield: {ship.base_shield}</span>
+					{#if allItems.length > 0}
+						<div class="salvage-list">
+							{#each allItems as item (item.id)}
+								{@const canAfford = playerState.credits >= item.price}
+								{@const rInfo = getRarityInfo(item.component.rarity)}
+								<div class="salvage-card" class:unavailable={!canAfford} class:exotic-glow={rInfo.stars > 5}>
+									<div class="salvage-header">
+										<span class="salvage-name">{item.component.name}</span>
+										<div class="rarity-stars" title="{rInfo.label}">
+											{#each Array(Math.min(rInfo.stars, 5)) as _}
+												<span class="r-star filled" style="color: {rInfo.color}">{'\u2605'}</span>
+											{/each}
+											{#each Array(Math.max(0, 5 - rInfo.stars)) as _}
+												<span class="r-star empty">{'\u2606'}</span>
+											{/each}
+											{#if rInfo.stars > 5}
+												<span class="r-star overflow" style="color: {rInfo.color}">+{'\u2605'}</span>
+											{/if}
+										</div>
+									</div>
+									<div class="salvage-meta">
+										<span class="salvage-type">{item.component.slot_type_label ?? (item.component.slot_type ?? 'unknown').replace(/_/g, ' ')}</span>
+										<span class="salvage-condition">
+											{item.condition_description ?? 'Unknown'}
+											<span class="condition-pct">({item.condition ?? 0}%)</span>
+										</span>
+									</div>
+									{#if item.owner_commentary}
+										<p class="merchant-commentary">"{item.owner_commentary}"</p>
 									{/if}
-									<span>Fuel: {ship.base_fuel}</span>
-									<span>Cargo: {ship.base_cargo}</span>
-									<span>Weapons: {ship.base_weapons}</span>
+									<div class="salvage-footer">
+										<div class="salvage-price-block">
+											<span class="salvage-price" class:affordable={canAfford} class:expensive={!canAfford}>
+												{formatPrice(item.price)} credits
+											</span>
+											<span class="salvage-stock">Stock: {(item.quantity ?? 0).toLocaleString()}</span>
+										</div>
+										<button
+											class="buy-btn"
+											disabled={isPurchasing || !canAfford || (item.quantity ?? 0) <= 0}
+											onclick={() => handlePurchaseSalvage(item)}
+										>
+											{#if isPurchasing}
+												Installing...
+											{:else if (item.quantity ?? 0) <= 0}
+												Out of Stock
+											{:else if !canAfford}
+												Can't Afford
+											{:else}
+												Buy & Install
+											{/if}
+										</button>
+									</div>
 								</div>
-								<div class="ship-footer">
-									<span
-										class="ship-price"
-										class:affordable={canAfford}
-										class:expensive={!canAfford}
-									>
-										{ship.price.toLocaleString()} credits
-									</span>
-									<button
-										class="buy-btn"
-										disabled={isPurchasing || !canAfford}
-										onclick={() => handlePurchaseCatalogShip(ship)}
-									>
-										{#if isPurchasing}
-											Purchasing...
-										{:else if !canAfford}
-											Insufficient Credits
-										{:else}
-											Purchase
-										{/if}
-									</button>
-								</div>
-							</div>
-						{/each}
-					</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="no-features">Salvage yard is empty.</p>
+					{/if}
 				{:else}
-					<p class="no-features">No ships available in the catalog.</p>
-					<button class="action-btn" onclick={loadShipCatalog}>Refresh Catalog</button>
+					<p class="no-features">No salvage yard available at this location.</p>
+					<button class="action-btn" onclick={loadSalvageYard}>Retry</button>
 				{/if}
 			{:else if activeItem === 'cartographer'}
 				<!-- Cartographer Panel -->
 				<div class="service-panel">
 					<div class="service-description">
-						<span class="service-panel-icon">{'\u{1F5FA}'}</span>
+						<span class="service-panel-icon">
+							<svg viewBox="0 0 20 20" class="constellation-icon-lg" aria-hidden="true">
+								<circle cx="4" cy="4" r="1.5" fill="#e2e8f0" />
+								<circle cx="12" cy="3" r="1" fill="#a0aec0" />
+								<circle cx="17" cy="7" r="1.3" fill="#e2e8f0" />
+								<circle cx="9" cy="10" r="1.8" fill="#fbbf24" />
+								<circle cx="3" cy="14" r="1" fill="#a0aec0" />
+								<circle cx="15" cy="15" r="1.2" fill="#e2e8f0" />
+								<circle cx="7" cy="18" r="1" fill="#a0aec0" />
+								<line x1="4" y1="4" x2="12" y2="3" stroke="#4a5568" stroke-width="0.5" />
+								<line x1="12" y1="3" x2="17" y2="7" stroke="#4a5568" stroke-width="0.5" />
+								<line x1="12" y1="3" x2="9" y2="10" stroke="#4a5568" stroke-width="0.5" />
+								<line x1="4" y1="4" x2="9" y2="10" stroke="#4a5568" stroke-width="0.5" />
+								<line x1="9" y1="10" x2="3" y2="14" stroke="#4a5568" stroke-width="0.5" />
+								<line x1="9" y1="10" x2="15" y2="15" stroke="#4a5568" stroke-width="0.5" />
+								<line x1="3" y1="14" x2="7" y2="18" stroke="#4a5568" stroke-width="0.5" />
+							</svg>
+						</span>
 						<p>The Cartographer can help you chart new star systems, update your navigation data, and sell star maps of the surrounding sectors.</p>
 					</div>
 					<div class="service-actions">
@@ -1126,6 +1443,151 @@
 		</div>
 	{/if}
 
+	<!-- Ship Detail Modal -->
+	{#if inspectedShip}
+		{@const ship = inspectedShip.ship}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="travel-modal-overlay" onclick={() => { inspectedShip = null; }} role="presentation">
+			<!-- svelte-ignore a11y_interactive_supports_focus -->
+			<div class="ship-detail-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+				<button class="sdm-close" onclick={() => { inspectedShip = null; }}>&times;</button>
+
+				<div class="sdm-header">
+					<h3 class="sdm-name">{ship.name}</h3>
+					<div class="sdm-meta">
+						{#if ship.class_info}
+							<span class="sdm-role">{ship.class_info.label} &mdash; {ship.class_info.role}</span>
+						{:else}
+							<span class="sdm-role">{ship.class}</span>
+						{/if}
+						<div class="rarity-stars" title="{getRarityInfo(ship.rarity).label}">
+							{#each Array(Math.min(getRarityInfo(ship.rarity).stars, 5)) as _}
+								<span class="r-star filled" style="color: {getRarityInfo(ship.rarity).color}">{'\u2605'}</span>
+							{/each}
+							{#each Array(Math.max(0, 5 - getRarityInfo(ship.rarity).stars)) as _}
+								<span class="r-star empty">{'\u2606'}</span>
+							{/each}
+							{#if getRarityInfo(ship.rarity).stars > 5}
+								<span class="r-star overflow" style="color: {getRarityInfo(ship.rarity).color}">+{'\u2605'}</span>
+							{/if}
+						</div>
+					</div>
+				</div>
+
+				{#if ship.description}
+					<p class="sdm-description">{ship.description}</p>
+				{:else if ship.class_info?.description}
+					<p class="sdm-description">{ship.class_info.description}</p>
+				{/if}
+
+				{#if ship.stats}
+					<div class="sdm-section">
+						<h4>Ship Stats</h4>
+						<div class="sdm-stats-grid">
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Hull</span>
+								<span class="sdm-stat-value">{ship.stats.hull_strength.toLocaleString()}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Shields</span>
+								<span class="sdm-stat-value">{ship.stats.shield_strength.toLocaleString()}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Cargo</span>
+								<span class="sdm-stat-value">{ship.stats.cargo_capacity.toLocaleString()}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Speed</span>
+								<span class="sdm-stat-value">{ship.stats.speed}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Weapon Slots</span>
+								<span class="sdm-stat-value">{ship.stats.weapon_slots}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Utility Slots</span>
+								<span class="sdm-stat-value">{ship.stats.utility_slots}</span>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				{#if ship.fuel}
+					<div class="sdm-section">
+						<h4>Fuel</h4>
+						<div class="sdm-stats-grid cols-3">
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Max Fuel</span>
+								<span class="sdm-stat-value">{ship.fuel.max_fuel.toLocaleString()}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Regen Rate</span>
+								<span class="sdm-stat-value">{ship.fuel.regen_rate}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Consumption</span>
+								<span class="sdm-stat-value">{ship.fuel.consumption_rate}</span>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				{#if ship.components}
+					<div class="sdm-section">
+						<h4>Components</h4>
+						<div class="sdm-stats-grid cols-3">
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Weapons</span>
+								<span class="sdm-stat-value">{ship.components.weapons}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Sensors</span>
+								<span class="sdm-stat-value">{ship.components.sensors}</span>
+							</div>
+							<div class="sdm-stat">
+								<span class="sdm-stat-label">Warp Drive</span>
+								<span class="sdm-stat-value">{ship.components.warp_drive}</span>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				{#if ship.special_features && ship.special_features.length > 0}
+					<div class="sdm-section">
+						<h4>Special Features</h4>
+						<div class="sdm-features">
+							{#each ship.special_features as feat}
+								<div class="sdm-feature">
+									<span class="sdm-feature-name">{feat.name}</span>
+									<span class="sdm-feature-value">
+										{typeof feat.value === 'boolean' ? (feat.value ? 'Yes' : 'No') : feat.value}
+									</span>
+									<span class="sdm-feature-desc">{feat.description}</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<!-- TODO(human): Strengths & Weaknesses display section -->
+				{#if ship.class_info?.strengths || ship.class_info?.weaknesses}
+					<div class="sdm-section sdm-sw-section">
+						<h4>Assessment</h4>
+					</div>
+				{/if}
+
+				<div class="sdm-footer">
+					{#if ship.requirements}
+						<span class="sdm-req" class:met={playerState.level >= ship.requirements.level} class:unmet={playerState.level < ship.requirements.level}>
+							Required Level: {ship.requirements.level}
+						</span>
+					{/if}
+					<span class="sdm-price">{formatPrice(inspectedShip.current_price)} credits</span>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Travel Confirmation Modal -->
 	{#if pendingTravel}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1167,6 +1629,10 @@
 				{#if pendingTravel.distance}
 					<p class="modal-distance">{pendingTravel.distance.toFixed(1)} light years away</p>
 				{/if}
+				{#if pendingTravel.fuelCost != null}
+					<p class="modal-fuel-cost">Fuel cost: <strong>{pendingTravel.fuelCost}</strong></p>
+				{/if}
+				<!-- TODO(human): Add pirate warning display here -->
 				<div class="modal-actions">
 					<button class="modal-btn modal-btn-cancel" onclick={cancelTravel}>
 						No
@@ -1372,31 +1838,90 @@
 		font-size: 0.9rem;
 	}
 
-	.ship-class {
-		font-size: 0.7rem;
+	.ship-rarity {
+		font-size: 0.65rem;
 		padding: 0.125rem 0.375rem;
-		background: rgba(99, 179, 237, 0.2);
-		color: #63b3ed;
 		border-radius: 3px;
 		text-transform: uppercase;
+		font-weight: 600;
 	}
 
-	.ship-desc {
-		font-size: 0.75rem;
+	.ship-rarity.rarity-common {
+		background: rgba(113, 128, 150, 0.2);
 		color: #a0aec0;
-		margin: 0 0 0.5rem 0;
 	}
 
-	.ship-stats {
+	.ship-rarity.rarity-uncommon {
+		background: rgba(72, 187, 120, 0.2);
+		color: #68d391;
+	}
+
+	.ship-rarity.rarity-rare {
+		background: rgba(99, 179, 237, 0.2);
+		color: #63b3ed;
+	}
+
+	.ship-rarity.rarity-epic {
+		background: rgba(159, 122, 234, 0.2);
+		color: #b794f4;
+	}
+
+	.ship-rarity.rarity-legendary {
+		background: rgba(246, 173, 85, 0.2);
+		color: #f6ad55;
+	}
+
+	.ship-class-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.375rem 0.5rem;
+		margin-bottom: 0.5rem;
+		background: rgba(26, 32, 44, 0.6);
+		border: 1px solid #2d3748;
+		border-radius: 4px;
+		color: #63b3ed;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s;
+		text-align: left;
+		text-transform: capitalize;
+	}
+
+	.ship-class-btn:hover {
+		background: rgba(49, 60, 80, 0.8);
+		border-color: #4a5568;
+		color: #90cdf4;
+	}
+
+	.class-role {
+		color: #718096;
+		font-weight: 400;
+	}
+
+	.inspect-hint {
+		margin-left: auto;
+		font-size: 0.7rem;
+		color: #4a5568;
+		font-weight: 400;
+	}
+
+	.ship-class-btn:hover .inspect-hint {
+		color: #718096;
+	}
+
+	.ship-stats-brief {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		font-size: 0.7rem;
-		color: #718096;
+		color: #a0aec0;
 		margin-bottom: 0.5rem;
 	}
 
-	.ship-stats span {
+	.ship-stats-brief span {
 		background: rgba(26, 32, 44, 0.6);
 		padding: 0.125rem 0.375rem;
 		border-radius: 3px;
@@ -1410,10 +1935,30 @@
 		border-top: 1px solid rgba(74, 85, 104, 0.5);
 	}
 
+	.ship-price-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
 	.ship-price {
 		font-weight: 600;
 		color: #f6ad55;
 		font-size: 0.85rem;
+	}
+
+	.ship-stock {
+		font-size: 0.7rem;
+		color: #718096;
+	}
+
+	.level-req {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: #fc8181;
+		padding: 0.25rem 0.5rem;
+		background: rgba(239, 68, 68, 0.1);
+		border-radius: 4px;
 	}
 
 	.buy-btn {
@@ -1437,6 +1982,332 @@
 		cursor: not-allowed;
 		background: linear-gradient(to bottom, #4a5568, #2d3748);
 		border-color: #1a202c;
+	}
+
+	/* Ship Detail Modal */
+	.ship-detail-modal {
+		position: relative;
+		background: linear-gradient(to bottom, #2d3748, #1a202c);
+		border: 1px solid #4a5568;
+		border-radius: 12px;
+		padding: 1.5rem;
+		max-width: 480px;
+		width: 90%;
+		max-height: 85vh;
+		overflow-y: auto;
+		box-shadow:
+			0 8px 32px rgba(0, 0, 0, 0.5),
+			0 0 0 1px rgba(100, 120, 140, 0.2);
+	}
+
+	.ship-detail-modal::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.ship-detail-modal::-webkit-scrollbar-track {
+		background: rgba(74, 85, 104, 0.2);
+		border-radius: 3px;
+	}
+
+	.ship-detail-modal::-webkit-scrollbar-thumb {
+		background: #4a5568;
+		border-radius: 3px;
+	}
+
+	.sdm-close {
+		position: absolute;
+		top: 0.75rem;
+		right: 0.75rem;
+		background: none;
+		border: none;
+		color: #718096;
+		font-size: 1.5rem;
+		cursor: pointer;
+		line-height: 1;
+		padding: 0.25rem;
+	}
+
+	.sdm-close:hover {
+		color: #e2e8f0;
+	}
+
+	.sdm-header {
+		margin-bottom: 0.75rem;
+	}
+
+	.sdm-name {
+		font-size: 1.2rem;
+		font-weight: 700;
+		color: #e2e8f0;
+		margin: 0 0 0.25rem 0;
+	}
+
+	.sdm-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.sdm-role {
+		font-size: 0.8rem;
+		color: #a0aec0;
+	}
+
+	.sdm-description {
+		font-size: 0.85rem;
+		color: #a0aec0;
+		line-height: 1.5;
+		margin: 0 0 1rem 0;
+		padding-bottom: 0.75rem;
+		border-bottom: 1px solid rgba(74, 85, 104, 0.5);
+	}
+
+	.sdm-section {
+		margin-bottom: 0.75rem;
+	}
+
+	.sdm-section h4 {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: #718096;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin: 0 0 0.5rem 0;
+	}
+
+	.sdm-stats-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.375rem;
+	}
+
+	.sdm-stats-grid.cols-3 {
+		grid-template-columns: 1fr 1fr 1fr;
+	}
+
+	.sdm-stat {
+		display: flex;
+		justify-content: space-between;
+		padding: 0.25rem 0.5rem;
+		background: rgba(26, 32, 44, 0.6);
+		border-radius: 4px;
+		font-size: 0.8rem;
+	}
+
+	.sdm-stat-label {
+		color: #a0aec0;
+	}
+
+	.sdm-stat-value {
+		color: #e2e8f0;
+		font-weight: 600;
+	}
+
+	.sdm-features {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.sdm-feature {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		grid-template-rows: auto auto;
+		gap: 0.125rem 0.5rem;
+		padding: 0.375rem 0.5rem;
+		background: rgba(26, 32, 44, 0.6);
+		border-radius: 4px;
+		border-left: 2px solid #f6ad55;
+	}
+
+	.sdm-feature-name {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: #e2e8f0;
+	}
+
+	.sdm-feature-value {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: #f6ad55;
+		text-align: right;
+	}
+
+	.sdm-feature-desc {
+		grid-column: 1 / -1;
+		font-size: 0.7rem;
+		color: #718096;
+	}
+
+	.sdm-footer {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding-top: 0.75rem;
+		border-top: 1px solid rgba(74, 85, 104, 0.5);
+		margin-top: 0.5rem;
+	}
+
+	.sdm-req {
+		font-size: 0.8rem;
+		font-weight: 600;
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+	}
+
+	.sdm-req.met {
+		color: #68d391;
+		background: rgba(72, 187, 120, 0.1);
+	}
+
+	.sdm-req.unmet {
+		color: #fc8181;
+		background: rgba(239, 68, 68, 0.1);
+	}
+
+	.sdm-price {
+		font-size: 1rem;
+		font-weight: 700;
+		color: #f6ad55;
+	}
+
+	/* Salvage Yard Cards */
+	.salvage-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	.salvage-card {
+		background: rgba(45, 55, 72, 0.8);
+		border: 1px solid #4a5568;
+		border-radius: 6px;
+		padding: 0.75rem;
+	}
+
+	.salvage-card.unavailable {
+		opacity: 0.7;
+		border-color: #2d3748;
+	}
+
+	.salvage-card.exotic-glow {
+		border-color: #ffd700;
+		box-shadow: 0 0 8px rgba(255, 215, 0, 0.25), inset 0 0 8px rgba(255, 215, 0, 0.05);
+		animation: exotic-shimmer 3s ease-in-out infinite;
+	}
+
+	@keyframes exotic-shimmer {
+		0%, 100% { box-shadow: 0 0 8px rgba(255, 215, 0, 0.25), inset 0 0 8px rgba(255, 215, 0, 0.05); }
+		50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.4), inset 0 0 12px rgba(255, 215, 0, 0.1); }
+	}
+
+	.salvage-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.375rem;
+	}
+
+	.salvage-name {
+		font-weight: 600;
+		color: #e2e8f0;
+		font-size: 0.9rem;
+	}
+
+	.rarity-stars {
+		display: flex;
+		align-items: center;
+		gap: 1px;
+		flex-shrink: 0;
+	}
+
+	.r-star {
+		font-size: 0.55rem;
+		line-height: 1;
+	}
+
+	.r-star.filled {
+		filter: drop-shadow(0 0 1px currentColor);
+	}
+
+	.r-star.empty {
+		color: #4a5568;
+	}
+
+	.r-star.overflow {
+		font-size: 0.5rem;
+		font-weight: 700;
+		animation: overflow-pulse 1.5s ease-in-out infinite;
+	}
+
+	@keyframes overflow-pulse {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50% { opacity: 0.8; transform: scale(1.15); }
+	}
+
+	.salvage-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.salvage-type {
+		color: #a0aec0;
+		background: rgba(26, 32, 44, 0.6);
+		padding: 0.125rem 0.375rem;
+		border-radius: 3px;
+		text-transform: capitalize;
+	}
+
+	.salvage-condition {
+		color: #a0aec0;
+	}
+
+	.condition-pct {
+		color: #718096;
+	}
+
+	.salvage-footer {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding-top: 0.5rem;
+		border-top: 1px solid rgba(74, 85, 104, 0.5);
+	}
+
+	.salvage-price-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
+	.salvage-price {
+		font-weight: 600;
+		color: #f6ad55;
+		font-size: 0.85rem;
+	}
+
+	.salvage-price.affordable {
+		color: #48bb78;
+	}
+
+	.salvage-price.expensive {
+		color: #fc8181;
+	}
+
+	.salvage-stock {
+		font-size: 0.7rem;
+		color: #718096;
+	}
+
+	.salvage-source {
+		font-size: 0.7rem;
+		color: #a0aec0;
+		background: rgba(26, 32, 44, 0.6);
+		padding: 0.125rem 0.375rem;
+		border-radius: 3px;
 	}
 
 	.error-message {
@@ -2620,6 +3491,44 @@
 		color: #a0aec0;
 	}
 
+	/* Warp Gate Sort Bar */
+	.gate-sort-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.gate-sort-label {
+		font-size: 0.7rem;
+		color: #718096;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin-right: 0.15rem;
+	}
+
+	.gate-sort-btn {
+		background: rgba(45, 55, 72, 0.6);
+		border: 1px solid #4a5568;
+		border-radius: 4px;
+		color: #a0aec0;
+		font-size: 0.7rem;
+		padding: 0.2rem 0.5rem;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.gate-sort-btn:hover {
+		border-color: #6bb8cc;
+		color: #e2e8f0;
+	}
+
+	.gate-sort-btn.active {
+		background: rgba(74, 144, 164, 0.25);
+		border-color: #4a90a4;
+		color: #e2e8f0;
+	}
+
 	/* Warp Gates List Styles */
 	.warp-gates-list {
 		display: flex;
@@ -2777,6 +3686,12 @@
 	.modal-distance {
 		font-size: 0.85rem;
 		color: #6bb8cc;
+		margin: 0 0 0.5rem 0;
+	}
+
+	.modal-fuel-cost {
+		font-size: 0.85rem;
+		color: #f6ad55;
 		margin: 0 0 1.25rem 0;
 	}
 
@@ -2839,6 +3754,11 @@
 
 	.service-panel-icon {
 		font-size: 3rem;
+	}
+
+	.constellation-icon-lg {
+		width: 3rem;
+		height: 3rem;
 	}
 
 	.service-description p {
@@ -2941,5 +3861,169 @@
 	.orbital-body.selected::before {
 		border-color: rgba(246, 173, 85, 0.5);
 		border-style: solid;
+	}
+
+	/* Starter ship pitch card */
+	.starter-pitch {
+		border-color: rgba(246, 173, 85, 0.4) !important;
+		background: linear-gradient(135deg, rgba(246, 173, 85, 0.08), rgba(221, 107, 32, 0.05)) !important;
+	}
+
+	.pitch-dialogue {
+		padding: 0.75rem;
+		margin-bottom: 0.5rem;
+		border-left: 3px solid #f6ad55;
+		background: rgba(0, 0, 0, 0.3);
+		border-radius: 0 6px 6px 0;
+	}
+
+	.pitch-speaker {
+		display: block;
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: #f6ad55;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin-bottom: 0.35rem;
+	}
+
+	.pitch-text {
+		font-size: 0.8rem;
+		line-height: 1.5;
+		color: #cbd5e0;
+		font-style: italic;
+		margin: 0;
+	}
+
+	.starter-tag {
+		font-size: 0.65rem;
+		font-weight: 700;
+		color: #48bb78;
+		background: rgba(72, 187, 120, 0.15);
+		border: 1px solid rgba(72, 187, 120, 0.3);
+		padding: 0.1rem 0.5rem;
+		border-radius: 9999px;
+		letter-spacing: 0.1em;
+	}
+
+	.price-note {
+		font-size: 0.7rem;
+		color: #a0aec0;
+		font-style: italic;
+		margin-left: 0.25rem;
+	}
+
+	/* Merchant commentary — dynamic sales pitch from backend */
+	.merchant-commentary {
+		font-size: 0.75rem;
+		line-height: 1.4;
+		color: #a0aec0;
+		font-style: italic;
+		margin: 0.375rem 0 0.25rem;
+		padding: 0.35rem 0.5rem;
+		border-left: 2px solid rgba(160, 174, 192, 0.3);
+		background: rgba(0, 0, 0, 0.15);
+		border-radius: 0 4px 4px 0;
+	}
+
+	/* Ship Naming Prompt */
+	.naming-prompt {
+		background: rgba(26, 32, 44, 0.8);
+		border: 1px solid #4299e1;
+		border-radius: 6px;
+		padding: 0.75rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.naming-header {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: #e2e8f0;
+		margin-bottom: 0.35rem;
+	}
+
+	.naming-icon {
+		color: #4299e1;
+	}
+
+	.naming-hint {
+		font-size: 0.7rem;
+		color: #68d391;
+		margin: 0 0 0.5rem;
+	}
+
+	.naming-controls {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.naming-input {
+		width: 100%;
+		background: rgba(0, 0, 0, 0.3);
+		border: 1px solid #4a5568;
+		border-radius: 4px;
+		color: #e2e8f0;
+		padding: 0.35rem 0.5rem;
+		font-size: 0.8rem;
+		outline: none;
+		box-sizing: border-box;
+	}
+
+	.naming-input:focus {
+		border-color: #4299e1;
+	}
+
+	.naming-buttons {
+		display: flex;
+		gap: 0.4rem;
+	}
+
+	.christen-btn {
+		flex: 1;
+		padding: 0.35rem;
+		background: rgba(66, 153, 225, 0.3);
+		border: 1px solid #4299e1;
+		border-radius: 4px;
+		color: #e2e8f0;
+		font-size: 0.75rem;
+		cursor: pointer;
+	}
+
+	.christen-btn:hover:not(:disabled) {
+		background: rgba(66, 153, 225, 0.5);
+	}
+
+	.christen-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.skip-btn {
+		padding: 0.35rem 0.75rem;
+		background: transparent;
+		border: 1px solid #4a5568;
+		border-radius: 4px;
+		color: #a0aec0;
+		font-size: 0.75rem;
+		cursor: pointer;
+	}
+
+	.skip-btn:hover:not(:disabled) {
+		border-color: #718096;
+		color: #e2e8f0;
+	}
+
+	.naming-message {
+		font-size: 0.75rem;
+		color: #fc8181;
+		padding: 0.25rem;
+	}
+
+	.naming-message.success {
+		color: #68d391;
 	}
 </style>
