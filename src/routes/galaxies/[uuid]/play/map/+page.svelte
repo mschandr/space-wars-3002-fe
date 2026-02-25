@@ -53,6 +53,9 @@
 	let selectedMapStar = $state<KnownSystem | null>(null);
 	const displayMapStar = $derived(selectedMapStar ?? hoveredMapStar);
 
+	// Sidebar mini-grid → SectorMap focus
+	let sidebarFocusSectorUuid = $state<string | null>(null);
+
 	// Drill-down overlay
 	let drilldownSectorUuid = $state<string | null>(null);
 	let drilldownSectorName = $state('');
@@ -444,6 +447,7 @@
 					gridSize={sectorGridSize}
 					playerSectorUuid={apiPlayerSectorUuid ?? playerState.currentSector?.uuid}
 					playerSystemUuid={playerState.currentSystem?.uuid}
+					focusSectorUuid={sidebarFocusSectorUuid}
 					onSectorClick={handleSectorClick}
 					onStarHover={(star) => hoveredMapStar = star}
 					onStarSelect={(star) => selectedMapStar = star}
@@ -548,6 +552,31 @@
 						<span class="legend-entry"><span class="legend-line pirate"></span> Pirate Lane</span>
 						<span class="legend-entry"><span class="legend-circle danger"></span> Danger Zone</span>
 						<span class="legend-entry"><span class="legend-circle sensor"></span> Sensor Range</span>
+					</div>
+				</div>
+
+				<!-- Mini sector grid navigator -->
+				<div class="mini-sector-nav">
+					<span class="mini-nav-title">SECTORS</span>
+					<div class="mini-nav-grid" style="--grid-size: {sectorGridSize}">
+						{#each sectorViewEntries as s}
+							{@const isPlayer = s.uuid === (apiPlayerSectorUuid ?? playerState.currentSector?.uuid)}
+							{@const isFocused = s.uuid === sidebarFocusSectorUuid}
+							{@const isClickable = s.fog === 'revealed'}
+							<button
+								class="mini-nav-cell"
+								class:mini-nav-player={isPlayer}
+								class:mini-nav-focused={isFocused}
+								class:mini-nav-revealed={s.fog === 'revealed'}
+								class:mini-nav-adjacent={s.fog === 'adjacent'}
+								class:mini-nav-hidden={s.fog === 'hidden'}
+								disabled={!isClickable}
+								style="grid-column: {s.gridX + 1}; grid-row: {sectorGridSize - s.gridY};"
+								aria-label={isClickable ? s.name : s.fog === 'adjacent' ? 'Unexplored' : 'Unknown'}
+								title={isClickable ? s.name : s.fog === 'adjacent' ? 'Unexplored' : 'Unknown'}
+								onclick={() => { sidebarFocusSectorUuid = s.uuid; }}
+							></button>
+						{/each}
 					</div>
 				</div>
 			</div>
@@ -946,5 +975,71 @@
 
 	.legend-circle.sensor {
 		border: 1px dashed #3b82f6;
+	}
+
+	/* --- Mini sector grid navigator --- */
+	.mini-sector-nav {
+		background: rgba(26, 32, 44, 0.95);
+		border: 1px solid #4a5568;
+		border-radius: 8px;
+		padding: 0.5rem 0.6rem;
+	}
+
+	.mini-nav-title {
+		display: block;
+		font-size: 0.6rem;
+		font-weight: 600;
+		color: #718096;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		margin-bottom: 0.375rem;
+	}
+
+	.mini-nav-grid {
+		display: grid;
+		grid-template-columns: repeat(var(--grid-size), 1fr);
+		grid-template-rows: repeat(var(--grid-size), 1fr);
+		gap: 2px;
+		aspect-ratio: 1;
+		width: 100%;
+	}
+
+	.mini-nav-cell {
+		border: none;
+		border-radius: 2px;
+		padding: 0;
+		cursor: default;
+		transition: all 0.12s;
+		aspect-ratio: 1;
+	}
+
+	.mini-nav-cell.mini-nav-hidden {
+		background: rgba(8, 10, 18, 0.8);
+	}
+
+	.mini-nav-cell.mini-nav-adjacent {
+		background: rgba(30, 41, 59, 0.5);
+	}
+
+	.mini-nav-cell.mini-nav-revealed {
+		background: rgba(45, 55, 72, 0.8);
+		cursor: pointer;
+	}
+
+	.mini-nav-cell.mini-nav-revealed:hover {
+		background: rgba(66, 153, 225, 0.4);
+	}
+
+	.mini-nav-cell.mini-nav-focused {
+		outline: 1.5px solid #63b3ed;
+	}
+
+	.mini-nav-cell.mini-nav-player {
+		background: rgba(239, 68, 68, 0.4);
+		outline: 1.5px solid #ef4444;
+	}
+
+	.mini-nav-cell:disabled {
+		cursor: default;
 	}
 </style>

@@ -101,13 +101,13 @@
 	}
 
 	// Rarity → star rating system
-	const RARITY_STARS: Record<string, { stars: number; max: number; color: string; label: string }> = {
-		common:   { stars: 1, max: 5, color: '#a0aec0', label: 'Common' },
-		uncommon: { stars: 2, max: 5, color: '#68d391', label: 'Uncommon' },
-		rare:     { stars: 3, max: 5, color: '#63b3ed', label: 'Rare' },
-		epic:     { stars: 4, max: 5, color: '#b794f4', label: 'Epic' },
-		unique:   { stars: 5, max: 5, color: '#f6ad55', label: 'Unique' },
-		exotic:   { stars: 6, max: 5, color: '#ffd700', label: 'Exotic' }
+	const RARITY_STARS: Record<string, { stars: number; color: string; label: string }> = {
+		common:   { stars: 1, color: '#a0aec0', label: 'Common' },
+		uncommon: { stars: 2, color: '#68d391', label: 'Uncommon' },
+		rare:     { stars: 3, color: '#63b3ed', label: 'Rare' },
+		epic:     { stars: 4, color: '#b794f4', label: 'Epic' },
+		unique:   { stars: 5, color: '#f6ad55', label: 'Unique' },
+		exotic:   { stars: 6, color: '#ffd700', label: 'Exotic' }
 	};
 
 	function getRarityInfo(rarity?: string) {
@@ -1446,6 +1446,7 @@
 	<!-- Ship Detail Modal -->
 	{#if inspectedShip}
 		{@const ship = inspectedShip.ship}
+		{@const rarity = getRarityInfo(ship.rarity)}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div class="travel-modal-overlay" onclick={() => { inspectedShip = null; }} role="presentation">
 			<!-- svelte-ignore a11y_interactive_supports_focus -->
@@ -1460,15 +1461,15 @@
 						{:else}
 							<span class="sdm-role">{ship.class}</span>
 						{/if}
-						<div class="rarity-stars" title="{getRarityInfo(ship.rarity).label}">
-							{#each Array(Math.min(getRarityInfo(ship.rarity).stars, 5)) as _}
-								<span class="r-star filled" style="color: {getRarityInfo(ship.rarity).color}">{'\u2605'}</span>
+						<div class="rarity-stars" title="{rarity.label}">
+							{#each Array(Math.min(rarity.stars, 5)) as _}
+								<span class="r-star filled" style="color: {rarity.color}">{'\u2605'}</span>
 							{/each}
-							{#each Array(Math.max(0, 5 - getRarityInfo(ship.rarity).stars)) as _}
+							{#each Array(Math.max(0, 5 - rarity.stars)) as _}
 								<span class="r-star empty">{'\u2606'}</span>
 							{/each}
-							{#if getRarityInfo(ship.rarity).stars > 5}
-								<span class="r-star overflow" style="color: {getRarityInfo(ship.rarity).color}">+{'\u2605'}</span>
+							{#if rarity.stars > 5}
+								<span class="r-star overflow" style="color: {rarity.color}">+{'\u2605'}</span>
 							{/if}
 						</div>
 					</div>

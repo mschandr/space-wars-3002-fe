@@ -9,12 +9,14 @@
 		gridSize: number;
 		playerSectorUuid: string | undefined;
 		playerSystemUuid: string | undefined;
+		/** Externally controlled focused sector (e.g. from sidebar mini grid) */
+		focusSectorUuid?: string | null;
 		onSectorClick?: (sectorUuid: string) => void;
 		onStarHover?: (star: KnownSystem | null) => void;
 		onStarSelect?: (star: KnownSystem | null) => void;
 	}
 
-	let { sectors, knownSystems, knownLanes, gridSize, playerSectorUuid, playerSystemUuid, onSectorClick, onStarHover, onStarSelect }: Props = $props();
+	let { sectors, knownSystems, knownLanes, gridSize, playerSectorUuid, playerSystemUuid, focusSectorUuid, onSectorClick, onStarHover, onStarSelect }: Props = $props();
 
 	// Detail view interaction state
 	let hoveredStar = $state<KnownSystem | null>(null);
@@ -33,18 +35,25 @@
 	let gridFocusX = $state(0);
 	let gridFocusY = $state(0);
 
+	// Measure the detail backdrop so the viewBox matches its aspect ratio exactly
+	let backdropW = $state(0);
+	let backdropH = $state(0);
+
 	// --- Grid layout constants ---
 	const cellSize = 72;
 	const cellGap = 2;
 	const gridPad = 28;
 
-	// --- Detail layout constants ---
-	const detailW = 620;
+	// --- Detail layout constants (dynamically matched to container aspect ratio) ---
 	const detailH = 540;
 	const detailPad = 50;
-	const plotW = detailW - detailPad * 2;
-	const plotH = detailH - detailPad - 44; // 44px for title area at top
 	const plotTop = 44;
+	const plotH = detailH - detailPad - plotTop; // 446
+	// Width scales to match container aspect ratio — fills corner to corner
+	const detailW = $derived(backdropW > 0 && backdropH > 0
+		? Math.round(detailH * (backdropW / backdropH))
+		: 1240);
+	const plotW = $derived(detailW - detailPad * 2);
 
 	// --- Grid derived values ---
 	const gridSvgW = $derived(gridPad * 2 + gridSize * (cellSize + cellGap));
@@ -56,6 +65,13 @@
 	$effect(() => {
 		if (!focusedSectorUuid && playerSectorUuid) {
 			focusedSectorUuid = playerSectorUuid;
+		}
+	});
+
+	// Sync external focus prop to internal state
+	$effect(() => {
+		if (focusSectorUuid) {
+			focusedSectorUuid = focusSectorUuid;
 		}
 	});
 
@@ -371,7 +387,7 @@
 
 	{#if viewMode === 'detail' && focusedSector}
 		<!-- ===== DETAIL VIEW: Stars in a single sector ===== -->
-		<div class="detail-backdrop">
+		<div class="detail-backdrop" bind:clientWidth={backdropW} bind:clientHeight={backdropH}>
 		<svg
 			viewBox="0 0 {detailW} {detailH}"
 			class="sector-map-svg detail-svg"
@@ -379,13 +395,6 @@
 			aria-label="Sector detail: {focusedSector.name}"
 		>
 			<defs>
-				<!-- Semi-transparent dark overlay with vignette — nebula bleeds through from CSS bg -->
-				<radialGradient id="space-overlay" cx="50%" cy="50%" r="65%">
-					<stop offset="0%" stop-color="#0c1222" stop-opacity="0.55" />
-					<stop offset="70%" stop-color="#080c18" stop-opacity="0.7" />
-					<stop offset="100%" stop-color="#040608" stop-opacity="0.85" />
-				</radialGradient>
-
 				<!-- Background star speckle pattern for depth -->
 				<pattern id="bg-stars" width="120" height="100" patternUnits="userSpaceOnUse">
 					<circle cx="8" cy="12" r="0.3" fill="#ffffff" opacity="0.12" />
@@ -423,9 +432,6 @@
 				</filter>
 			</defs>
 
-			<!-- Semi-transparent overlay — nebula image shows through from CSS background -->
-			<rect x="0" y="0" width={detailW} height={detailH} fill="url(#space-overlay)" rx="6" />
-
 			<!-- Background star speckle layer for distant starfield depth -->
 			<rect x={detailPad} y={plotTop} width={plotW} height={plotH} fill="url(#bg-stars)" />
 
@@ -437,9 +443,9 @@
 				<line x1={detailPad} y1={gy} x2={detailPad + plotW} y2={gy} stroke="#2a3a5a" stroke-width="0.5" opacity="0.3" />
 			{/each}
 
-			<!-- Plot area border with subtle glow -->
+			<!-- Plot area border -->
 			<rect x={detailPad} y={plotTop} width={plotW} height={plotH}
-				fill="none" stroke="#2a4a6f" stroke-width="1" rx="3" opacity="0.7" />
+				fill="none" stroke="#000000" stroke-width="3" rx="3" opacity="0.9" />
 
 			<!-- Sector title -->
 			<text x={detailW / 2} y="18" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600">
@@ -735,17 +741,38 @@
 	}
 
 	.detail-svg {
-		max-height: 580px;
+		width: 100%;
+		height: 100%;
+		position: relative;
+		z-index: 1;
 	}
 
 	.detail-backdrop {
+		flex: 1;
 		width: 100%;
-		max-width: 760px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		border-radius: 6px;
 		overflow: hidden;
-		background-image: url('/nursery.jpg.webp');
+		background-image: url('/image15.jpg');
 		background-size: cover;
 		background-position: center;
+		position: relative;
+	}
+
+	.detail-backdrop::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 6px;
+		background: radial-gradient(
+			ellipse 65% 65% at 50% 50%,
+			rgba(12, 18, 34, 0.35) 0%,
+			rgba(8, 12, 24, 0.45) 70%,
+			rgba(4, 6, 8, 0.55) 100%
+		);
+		pointer-events: none;
 	}
 
 	/* --- Zoom controls --- */

@@ -172,6 +172,8 @@
 	}
 
 	function navigateToMap() {
+		// If tutorial is behind the star map step, skip forward so it doesn't get stuck
+		tutorialState.skipToStep('click_star_map');
 		tutorialState.completeAction('click_star_map');
 		goto(`${base}/galaxies/${data.galaxyUuid}/play/map`);
 	}
@@ -213,7 +215,7 @@
 					class="btn-map"
 					data-tutorial="btn-star-map"
 					onclick={navigateToMap}
-					disabled={tutorialState.active && tutorialState.currentStep?.page === 'play' && tutorialState.currentStep?.id !== 'click_star_map' && tutorialState.currentStep?.id !== 'tutorial_complete'}
+					disabled={tutorialState.active && (tutorialState.currentStep?.id === 'enter_callsign' || tutorialState.currentStep?.id === 'submit_callsign')}
 				>
 					Star Map
 				</button>

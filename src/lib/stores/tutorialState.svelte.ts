@@ -298,6 +298,15 @@ class TutorialState {
 		this.persistStep();
 	}
 
+	/** Skip forward to a specific step (only if currently before it). */
+	skipToStep(stepId: string) {
+		if (!this.active) return;
+		const targetIdx = STEPS.findIndex((s) => s.id === stepId);
+		if (targetIdx === -1 || targetIdx <= this.stepIndex) return;
+		this.stepIndex = targetIdx;
+		this.persistStep();
+	}
+
 	/**
 	 * Called by UI components when the user performs an action.
 	 * If the action matches the current step, auto-advance.
