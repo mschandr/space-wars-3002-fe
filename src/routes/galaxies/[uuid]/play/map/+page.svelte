@@ -642,16 +642,17 @@
 
 <style>
 	.map-page {
-		min-height: 100vh;
+		height: 100vh;
 		background: #0a0a14;
 		display: flex;
 		flex-direction: column;
+		overflow: hidden;
 	}
 
 	.map-header {
 		background: linear-gradient(to bottom, #2d3748, #1a202c);
 		border-bottom: 1px solid #4a5568;
-		padding: 0.5rem 1rem;
+		padding: 0.25rem 0.75rem;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -726,9 +727,10 @@
 	.map-main {
 		flex: 1;
 		display: flex;
-		gap: 1rem;
-		padding: 1rem;
+		gap: 0.5rem;
+		padding: 0.5rem;
 		overflow: hidden;
+		min-height: 0;
 	}
 
 	.map-area {
@@ -737,6 +739,7 @@
 		border: 1px solid #4a5568;
 		border-radius: 8px;
 		overflow: hidden;
+		min-height: 0;
 	}
 
 	.view-toggle {

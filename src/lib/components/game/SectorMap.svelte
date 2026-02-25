@@ -35,9 +35,18 @@
 	let gridFocusX = $state(0);
 	let gridFocusY = $state(0);
 
-	// Measure the detail backdrop so the viewBox matches its aspect ratio exactly
+	// Measure the detail backdrop so the viewBox matches its aspect ratio exactly.
+	// We freeze the value after the first measurement to prevent layout-shift jitter
+	// (e.g. when sidebar content changes on star hover).
 	let backdropW = $state(0);
 	let backdropH = $state(0);
+	let frozenDetailW = $state(0);
+
+	$effect(() => {
+		if (frozenDetailW === 0 && backdropW > 0 && backdropH > 0) {
+			frozenDetailW = Math.round(540 * (backdropW / backdropH));
+		}
+	});
 
 	// --- Grid layout constants ---
 	const cellSize = 72;
@@ -49,10 +58,8 @@
 	const detailPad = 50;
 	const plotTop = 44;
 	const plotH = detailH - detailPad - plotTop; // 446
-	// Width scales to match container aspect ratio — fills corner to corner
-	const detailW = $derived(backdropW > 0 && backdropH > 0
-		? Math.round(detailH * (backdropW / backdropH))
-		: 1240);
+	// Width frozen after first measurement — fills corner to corner without jitter
+	const detailW = $derived(frozenDetailW > 0 ? frozenDetailW : 1240);
 	const plotW = $derived(detailW - detailPad * 2);
 
 	// --- Grid derived values ---
@@ -729,8 +736,9 @@
 		height: 100%;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		overflow: auto;
+		align-items: stretch;
+		overflow: hidden;
+		min-height: 0;
 	}
 
 	.sector-map-svg {
